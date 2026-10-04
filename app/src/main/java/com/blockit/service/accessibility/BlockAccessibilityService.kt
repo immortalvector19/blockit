@@ -78,19 +78,50 @@ class BlockAccessibilityService : AccessibilityService() {
             )
 
             // Log event asynchronously
-            appScope.launch(Dispatchers.IO) {
-                try {
-                    val container = BlockItApplication.from(this@BlockAccessibilityService)
-                    container.database.blockEventDao().insertEvent(
-                        BlockEventEntity(
-                            timestamp = System.currentTimeMillis(),
-                            targetType = TargetType.APP.name,
-                            identifier = pkgName,
-                            profileName = profile
+            logBlockEvent(pkgName, TargetType.APP, profile)
+            return
+        }
+
+        // Secondary Layer: If the foreground app is a browser, inspect current URL
+        if (BrowserUrlDetector.SUPPORTED_BROWSERS.contains(pkgName)) {
+            val root = rootInActiveWindow ?: event.source
+            if (root != null) {
+                val detectedDomain = BrowserUrlDetector.extractUrlFromBrowser(root, pkgName)
+                if (detectedDomain != null) {
+                    val domainEval = ruleEvaluator.isDomainBlocked(detectedDomain)
+                    if (domainEval.isBlocked) {
+                        val profile = domainEval.profileName ?: "Focus"
+                        val reason = domainEval.reason ?: "Website blocked"
+
+                        overlayController.showBlockOverlay(
+                            targetIdentifier = detectedDomain,
+                            profileName = profile,
+                            reason = reason,
+                            onHomeClicked = {
+                                performGlobalAction(GLOBAL_ACTION_HOME)
+                            }
                         )
-                    )
-                } catch (_: Exception) {}
+
+                        logBlockEvent(detectedDomain, TargetType.WEBSITE, profile)
+                    }
+                }
             }
+        }
+    }
+
+    private fun logBlockEvent(identifier: String, type: TargetType, profile: String) {
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val container = BlockItApplication.from(this@BlockAccessibilityService)
+                container.database.blockEventDao().insertEvent(
+                    BlockEventEntity(
+                        timestamp = System.currentTimeMillis(),
+                        targetType = type.name,
+                        identifier = identifier,
+                        profileName = profile
+                    )
+                )
+            } catch (_: Exception) {}
         }
     }
 

@@ -18,6 +18,11 @@
     <!-- Reboot and package replacement survivability -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Foreground services & notifications for VPN session -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".core.BlockItApplication"
         android:allowBackup="false"
@@ -57,6 +62,17 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Local DNS VPN Interceptor -->
+        <service
+            android:name=".service.vpn.LocalDnsVpnService"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
         </service>
 
         <!-- Boot & Time-Zone Change Rescheduler -->
