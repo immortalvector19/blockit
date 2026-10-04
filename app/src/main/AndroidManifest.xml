@@ -30,9 +30,9 @@
     <application
         android:name=".core.BlockItApplication"
         android:allowBackup="false"
-        android:icon="@android:drawable/ic_lock_lock"
+        android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@android:drawable/ic_lock_lock"
+        android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.BlockIt">
 
