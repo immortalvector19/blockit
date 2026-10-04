@@ -61,6 +61,13 @@ class AppContainer(private val context: Context) {
         FocusSessionManager(database, ruleEvaluator, scheduleManager)
     }
 
+    val usageInsightsRepository: com.blockit.data.repository.UsageInsightsRepository by lazy {
+        com.blockit.data.repository.UsageInsightsRepository(
+            blockEventDao = database.blockEventDao(),
+            installedAppsRepository = installedAppsRepository
+        )
+    }
+
     init {
         // Prime the rule evaluator cache and arm boundaries on startup
         applicationScope.launch {

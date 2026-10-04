@@ -11,6 +11,8 @@ import androidx.navigation.navArgument
 import com.blockit.core.di.AppContainer
 import com.blockit.ui.screens.apps.AppsPickerScreen
 import com.blockit.ui.screens.apps.AppsPickerViewModel
+import com.blockit.ui.screens.insights.InsightsScreen
+import com.blockit.ui.screens.insights.InsightsViewModel
 import com.blockit.ui.screens.profiles.ProfileDetailScreen
 import com.blockit.ui.screens.profiles.ProfileDetailViewModel
 import com.blockit.ui.screens.profiles.ProfilesScreen
@@ -24,6 +26,7 @@ object NavRoutes {
     const val ADD_APPS = "profile/{profileId}/add_apps"
     const val SCHEDULES = "profile/{profileId}/schedules"
     const val STRICT_MODE = "settings/strict_mode"
+    const val INSIGHTS = "insights"
 
     fun profileDetail(profileId: Long) = "profile/$profileId"
     fun addApps(profileId: Long) = "profile/$profileId/add_apps"
@@ -57,6 +60,9 @@ fun BlockItNavHost(
                 },
                 onOpenSettingsClick = {
                     navController.navigate(NavRoutes.STRICT_MODE)
+                },
+                onOpenInsightsClick = {
+                    navController.navigate(NavRoutes.INSIGHTS)
                 }
             )
         }
@@ -121,6 +127,18 @@ fun BlockItNavHost(
         composable(NavRoutes.STRICT_MODE) {
             StrictModeScreen(
                 preferenceManager = container.preferenceManager,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.INSIGHTS) {
+            val viewModel: InsightsViewModel = viewModel(
+                factory = InsightsViewModel.Factory(
+                    container.usageInsightsRepository
+                )
+            )
+            InsightsScreen(
+                viewModel = viewModel,
                 onBackClick = { navController.popBackStack() }
             )
         }

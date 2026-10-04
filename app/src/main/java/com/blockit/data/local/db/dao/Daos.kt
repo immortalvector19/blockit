@@ -138,6 +138,12 @@ interface FocusSessionDao {
     suspend fun cleanupExpiredSessions(currentTimeMs: Long)
 }
 
+data class TargetBlockStat(
+    val identifier: String,
+    val targetType: String,
+    val count: Int
+)
+
 @Dao
 interface BlockEventDao {
     @Insert
@@ -150,8 +156,23 @@ interface BlockEventDao {
     fun observeTotalBlockedCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM block_events WHERE timestamp >= :sinceTimestamp")
+    fun observeBlockCountSince(sinceTimestamp: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM block_events WHERE timestamp >= :sinceTimestamp")
     suspend fun getBlockCountSince(sinceTimestamp: Long): Int
+
+    @Query("""
+        SELECT identifier, targetType, COUNT(*) AS count
+        FROM block_events
+        GROUP BY identifier, targetType
+        ORDER BY count DESC
+        LIMIT :limit
+    """)
+    fun observeTopBlockedTargets(limit: Int = 10): Flow<List<TargetBlockStat>>
 
     @Query("DELETE FROM block_events WHERE timestamp < :olderThanTimestamp")
     suspend fun pruneOldEvents(olderThanTimestamp: Long)
+
+    @Query("DELETE FROM block_events")
+    suspend fun clearAllEvents()
 }

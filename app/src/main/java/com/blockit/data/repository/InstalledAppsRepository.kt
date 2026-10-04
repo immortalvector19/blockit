@@ -47,4 +47,14 @@ class InstalledAppsRepository(private val context: Context) {
         cachedApps = apps
         apps
     }
+
+    fun resolveAppName(packageName: String): String {
+        return try {
+            val pm = context.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(appInfo).toString().ifBlank { packageName }
+        } catch (_: Exception) {
+            packageName
+        }
+    }
 }

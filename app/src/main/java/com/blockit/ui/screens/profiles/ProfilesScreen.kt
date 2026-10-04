@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lock
@@ -65,6 +66,7 @@ fun ProfilesScreen(
     viewModel: ProfilesViewModel,
     onProfileClick: (Long) -> Unit,
     onOpenSettingsClick: () -> Unit,
+    onOpenInsightsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val profiles by viewModel.profiles.collectAsState()
@@ -94,6 +96,12 @@ fun ProfilesScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenInsightsClick) {
+                        Icon(
+                            imageVector = Icons.Default.BarChart,
+                            contentDescription = "Usage Insights"
+                        )
+                    }
                     IconButton(onClick = onOpenSettingsClick) {
                         Icon(
                             imageVector = if (strictConfig.isEnabled) Icons.Default.Lock else Icons.Default.Settings,
