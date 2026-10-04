@@ -2,7 +2,10 @@ package com.blockit.ui.overlay
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
@@ -173,13 +177,17 @@ fun BlockScreenContent(
                     ) {
                         items(allowedApps) { pkg ->
                             val appName = remember(pkg) { getAppName(context, pkg) }
+                            val appIcon = remember(pkg) { getAppIcon(context, pkg) }
                             Card(
                                 onClick = {
                                     if (onOpenAllowedApp != null) {
                                         onOpenAllowedApp(pkg)
                                     } else {
                                         val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
-                                        launchIntent?.let { context.startActivity(it) }
+                                        launchIntent?.let {
+                                            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(it)
+                                        }
                                     }
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -189,7 +197,11 @@ fun BlockScreenContent(
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Apps, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(18.dp))
+                                    if (appIcon != null) {
+                                        Image(bitmap = appIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    } else {
+                                        Icon(Icons.Default.Apps, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(20.dp))
+                                    }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = appName,
@@ -199,6 +211,27 @@ fun BlockScreenContent(
                                 }
                             }
                         }
+                    }
+                } else if (isWhitelistBlock && allowedApps.isEmpty()) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Text(
+                        text = "No permitted apps packed in this whitelist profile yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFA8A49C),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            launchIntent?.let {
+                                it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(it)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Open FocusShield", color = Color(0xFF34D399))
                     }
                 }
 
@@ -269,5 +302,22 @@ private fun getAppName(context: Context, packageName: String): String {
         pm.getApplicationLabel(info).toString()
     } catch (_: Exception) {
         packageName.substringAfterLast('.')
+    }
+}
+
+private fun getAppIcon(context: Context, packageName: String): androidx.compose.ui.graphics.ImageBitmap? {
+    return try {
+        val drawable = context.packageManager.getApplicationIcon(packageName)
+        val bitmap = Bitmap.createBitmap(
+            drawable.intrinsicWidth.coerceAtLeast(1),
+            drawable.intrinsicHeight.coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        bitmap.asImageBitmap()
+    } catch (_: Exception) {
+        null
     }
 }

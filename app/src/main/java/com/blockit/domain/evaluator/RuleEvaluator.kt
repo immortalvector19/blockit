@@ -41,6 +41,9 @@ class RuleEvaluator(
     @Volatile
     private var cachedSnapshot: ActiveRuleSnapshot = ActiveRuleSnapshot()
 
+    private val _snapshotFlow = kotlinx.coroutines.flow.MutableStateFlow(cachedSnapshot)
+    val snapshotFlow: StateFlow<ActiveRuleSnapshot> = _snapshotFlow
+
     /**
      * Re-evaluates active rules from SQLite and updates the in-memory cache.
      * Called whenever profiles, apps, domains, schedules, or focus sessions change.
@@ -54,6 +57,7 @@ class RuleEvaluator(
         val profiles = db.profileDao().getEnabledProfiles()
         if (profiles.isEmpty()) {
             cachedSnapshot = ActiveRuleSnapshot()
+            _snapshotFlow.value = cachedSnapshot
             return@withContext
         }
 
@@ -130,13 +134,15 @@ class RuleEvaluator(
             }
         }
 
-        cachedSnapshot = ActiveRuleSnapshot(
+        val newSnapshot = ActiveRuleSnapshot(
             blockedPackages = packageMap,
             blockedDomains = domainMap,
             hasActiveWhitelist = hasWhitelist,
             whitelistProfileName = activeWhitelistName,
             whitelistPackages = whitelistPackages
         )
+        cachedSnapshot = newSnapshot
+        _snapshotFlow.value = newSnapshot
     }
 
     /**
@@ -199,5 +205,6 @@ class RuleEvaluator(
 
     fun setSnapshot(snapshot: ActiveRuleSnapshot) {
         cachedSnapshot = snapshot
+        _snapshotFlow.value = snapshot
     }
 }

@@ -37,6 +37,19 @@ class BlockAccessibilityService : AccessibilityService() {
         }
 
         resolveHomePackages()
+
+        // Reactively observe snapshot changes
+        appScope.launch(Dispatchers.Main) {
+            ruleEvaluator.snapshotFlow.collect { snapshot ->
+                if (!snapshot.hasActiveWhitelist && overlayController.isOverlayShowing()) {
+                    val root = rootInActiveWindow
+                    val pkg = root?.packageName?.toString() ?: ""
+                    if (isHomePackage(pkg)) {
+                        overlayController.hideBlockOverlay()
+                    }
+                }
+            }
+        }
     }
 
     private fun resolveHomePackages() {
@@ -44,9 +57,27 @@ class BlockAccessibilityService : AccessibilityService() {
             val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
             }
-            val resolveInfos = packageManager.queryIntentActivities(homeIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            homePackages = resolveInfos.mapNotNull { it.activityInfo?.packageName }.toSet()
+            val resolveInfos = packageManager.queryIntentActivities(homeIntent, 0)
+            val pkgs = resolveInfos.mapNotNull { it.activityInfo?.packageName }.toMutableSet()
+            packageManager.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName?.let {
+                pkgs.add(it)
+            }
+            homePackages = pkgs
         } catch (_: Exception) {}
+    }
+
+    private fun isHomePackage(pkgName: String): Boolean {
+        if (pkgName.isBlank()) return false
+        return homePackages.contains(pkgName) ||
+                pkgName.contains("launcher", ignoreCase = true) ||
+                pkgName == "com.miui.home" ||
+                pkgName == "com.google.android.apps.nexuslauncher" ||
+                pkgName == "com.android.launcher3" ||
+                pkgName == "com.sec.android.app.launcher" ||
+                pkgName == "com.huawei.android.launcher" ||
+                pkgName == "com.oppo.launcher" ||
+                pkgName == "com.coloros.launcher" ||
+                pkgName == "com.oneplus.launcher"
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -66,10 +97,17 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Ignore essential system UI components (system bars, keyboards)
-        if (pkgName == "com.android.systemui" ||
+        // Ignore essential system framework and UI components.
+        // Critical: events from "android" (window compositor), SystemUI, Google Play Services, keyboards,
+        // or permission dialogs must NEVER be evaluated as regular apps and must NEVER dismiss the overlay!
+        if (pkgName == "android" ||
+            pkgName == "com.android.systemui" ||
+            pkgName == "com.google.android.gms" ||
+            pkgName == "com.android.permissioncontroller" ||
+            pkgName == "com.google.android.packageinstaller" ||
             pkgName.contains("inputmethod", ignoreCase = true) ||
-            pkgName.contains("keyboard", ignoreCase = true)
+            pkgName.contains("keyboard", ignoreCase = true) ||
+            pkgName.contains("autofill", ignoreCase = true)
         ) {
             return
         }
@@ -77,10 +115,7 @@ class BlockAccessibilityService : AccessibilityService() {
         if (homePackages.isEmpty()) {
             resolveHomePackages()
         }
-        val isHome = homePackages.contains(pkgName) ||
-                pkgName.contains("launcher", ignoreCase = true) ||
-                pkgName == "com.google.android.apps.nexuslauncher" ||
-                pkgName == "com.android.launcher3"
+        val isHome = isHomePackage(pkgName)
 
         // If user is on the Home Launcher:
         if (isHome) {
@@ -94,9 +129,10 @@ class BlockAccessibilityService : AccessibilityService() {
                     allowedApps = snapshot.whitelistPackages.toList(),
                     onHomeClicked = {},
                     onOpenAllowedApp = { appPkg ->
+                        overlayController.hideBlockOverlay()
                         val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
                         launchIntent?.let {
-                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                             startActivity(it)
                         }
                     }
@@ -110,7 +146,7 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Strict Mode: Guard Android Settings against deactivating or uninstalling BlockIt
+        // Strict Mode: Guard Android Settings against deactivating or uninstalling FocusShield
         if (pkgName == "com.android.settings") {
             val hasActiveBlocks = snapshot.blockedPackages.isNotEmpty() || snapshot.blockedDomains.isNotEmpty() || snapshot.hasActiveWhitelist
             if (hasActiveBlocks) {
@@ -143,9 +179,10 @@ class BlockAccessibilityService : AccessibilityService() {
                     performGlobalAction(GLOBAL_ACTION_HOME)
                 },
                 onOpenAllowedApp = { appPkg ->
+                    overlayController.hideBlockOverlay()
                     val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
                     launchIntent?.let {
-                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                         startActivity(it)
                     }
                 }
@@ -155,9 +192,12 @@ class BlockAccessibilityService : AccessibilityService() {
             logBlockEvent(pkgName, TargetType.APP, profile)
             return
         } else {
-            // Foreground app is allowed: dismiss overlay if showing
-            if (overlayController.isOverlayShowing()) {
-                overlayController.hideBlockOverlay()
+            // An allowed user app has come to the foreground.
+            // Dismiss the overlay only if Whitelist is NOT active, or if this app is an explicitly permitted whitelisted app.
+            if (!snapshot.hasActiveWhitelist || snapshot.whitelistPackages.contains(pkgName)) {
+                if (overlayController.isOverlayShowing()) {
+                    overlayController.hideBlockOverlay()
+                }
             }
         }
 

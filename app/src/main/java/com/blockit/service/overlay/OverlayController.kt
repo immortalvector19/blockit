@@ -8,8 +8,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -24,6 +28,16 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.blockit.ui.overlay.BlockScreenContent
 import com.blockit.ui.overlay.BlockOverlayActivity
+
+data class OverlayData(
+    val targetIdentifier: String,
+    val profileName: String,
+    val reason: String,
+    val isWhitelistBlock: Boolean = false,
+    val allowedApps: List<String> = emptyList(),
+    val onHomeClicked: () -> Unit,
+    val onOpenAllowedApp: ((String) -> Unit)? = null
+)
 
 class OverlayLifecycleOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -56,6 +70,8 @@ class OverlayController(private val context: Context) {
     private var overlayView: View? = null
     private var lifecycleOwner: OverlayLifecycleOwner? = null
 
+    private var currentData by mutableStateOf<OverlayData?>(null)
+
     @Volatile
     private var isShowing = false
 
@@ -68,8 +84,23 @@ class OverlayController(private val context: Context) {
         onHomeClicked: () -> Unit,
         onOpenAllowedApp: ((String) -> Unit)? = null
     ) {
+        val data = OverlayData(
+            targetIdentifier = targetIdentifier,
+            profileName = profileName,
+            reason = reason,
+            isWhitelistBlock = isWhitelistBlock,
+            allowedApps = allowedApps,
+            onHomeClicked = onHomeClicked,
+            onOpenAllowedApp = onOpenAllowedApp
+        )
+
         mainHandler.post {
-            if (isShowing) return@post
+            currentData = data
+
+            if (isShowing) {
+                // Overlay already attached to windowManager; Compose will reactively update
+                return@post
+            }
 
             // If SYSTEM_ALERT_WINDOW permission is granted, use instant full-screen Compose overlay
             if (Settings.canDrawOverlays(context)) {
@@ -77,28 +108,47 @@ class OverlayController(private val context: Context) {
                     val owner = OverlayLifecycleOwner()
                     lifecycleOwner = owner
 
+                    val container = object : android.widget.FrameLayout(context) {
+                        override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                            if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                                currentData?.onHomeClicked?.invoke()
+                                return true
+                            }
+                            return super.dispatchKeyEvent(event)
+                        }
+                    }
+
                     val composeView = ComposeView(context).apply {
                         setViewTreeLifecycleOwner(owner)
                         setViewTreeViewModelStoreOwner(owner)
                         setViewTreeSavedStateRegistryOwner(owner)
                         setContent {
-                            BlockScreenContent(
-                                targetIdentifier = targetIdentifier,
-                                profileName = profileName,
-                                reason = reason,
-                                isWhitelistBlock = isWhitelistBlock,
-                                allowedApps = allowedApps,
-                                onHomeClicked = {
-                                    hideBlockOverlay()
-                                    onHomeClicked()
-                                },
-                                onOpenAllowedApp = { pkg ->
-                                    hideBlockOverlay()
-                                    onOpenAllowedApp?.invoke(pkg)
-                                }
-                            )
+                            val active = currentData
+                            if (active != null) {
+                                BlockScreenContent(
+                                    targetIdentifier = active.targetIdentifier,
+                                    profileName = active.profileName,
+                                    reason = active.reason,
+                                    isWhitelistBlock = active.isWhitelistBlock,
+                                    allowedApps = active.allowedApps,
+                                    onHomeClicked = {
+                                        active.onHomeClicked()
+                                    },
+                                    onOpenAllowedApp = { pkg ->
+                                        active.onOpenAllowedApp?.invoke(pkg)
+                                    }
+                                )
+                            }
                         }
                     }
+
+                    container.addView(
+                        composeView,
+                        android.widget.FrameLayout.LayoutParams(
+                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                    )
 
                     val layoutParams = WindowManager.LayoutParams(
                         WindowManager.LayoutParams.MATCH_PARENT,
@@ -117,8 +167,8 @@ class OverlayController(private val context: Context) {
                         gravity = Gravity.CENTER
                     }
 
-                    windowManager.addView(composeView, layoutParams)
-                    overlayView = composeView
+                    windowManager.addView(container, layoutParams)
+                    overlayView = container
                     isShowing = true
                     return@post
                 } catch (_: Exception) {
@@ -133,6 +183,7 @@ class OverlayController(private val context: Context) {
 
     fun hideBlockOverlay() {
         mainHandler.post {
+            currentData = null
             overlayView?.let { view ->
                 try {
                     windowManager.removeView(view)
