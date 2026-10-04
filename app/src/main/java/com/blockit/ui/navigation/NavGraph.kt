@@ -36,6 +36,8 @@ import com.blockit.ui.screens.profiles.ProfilesViewModel
 import com.blockit.ui.screens.schedules.ScheduleEditorScreen
 import com.blockit.ui.screens.settings.SettingsHubScreen
 import com.blockit.ui.screens.strictmode.StrictModeScreen
+import com.blockit.ui.screens.theme.ThemeSettingsScreen
+import com.blockit.ui.screens.theme.ThemeSettingsViewModel
 
 object NavRoutes {
     const val ONBOARDING = "onboarding"
@@ -44,6 +46,7 @@ object NavRoutes {
     const val ADD_APPS = "profile/{profileId}/add_apps"
     const val SCHEDULES = "profile/{profileId}/schedules"
     const val SETTINGS_HUB = "settings"
+    const val THEME_SETTINGS = "settings/theme"
     const val STRICT_MODE = "settings/strict_mode"
     const val SETUP_GUIDE = "settings/setup_guide"
     const val BACKUP_RESTORE = "settings/backup_restore"
@@ -81,7 +84,7 @@ fun BlockItNavHost(
         exitTransition = { fadeOut(animationSpec = tween(200)) },
         popEnterTransition = { fadeIn(animationSpec = tween(200)) },
         popExitTransition = { fadeOut(animationSpec = tween(200)) },
-        modifier = modifier.fillMaxSize().background(com.blockit.ui.theme.CreamBackground)
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     ) {
         composable(NavRoutes.ONBOARDING) {
             OnboardingScreen(
@@ -174,11 +177,22 @@ fun BlockItNavHost(
 
         composable(NavRoutes.SETTINGS_HUB) {
             SettingsHubScreen(
+                onNavigateToThemeSettings = { navController.navigate(NavRoutes.THEME_SETTINGS) },
                 onNavigateToStrictMode = { navController.navigate(NavRoutes.STRICT_MODE) },
                 onNavigateToSetupGuide = { navController.navigate(NavRoutes.SETUP_GUIDE) },
                 onNavigateToBackupRestore = { navController.navigate(NavRoutes.BACKUP_RESTORE) },
                 onNavigateToHowItWorks = { navController.navigate(NavRoutes.HOW_IT_WORKS) },
                 onNavigateToOnboarding = { navController.navigate(NavRoutes.ONBOARDING) },
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.THEME_SETTINGS) {
+            val viewModel: ThemeSettingsViewModel = viewModel(
+                factory = ThemeSettingsViewModel.Factory(container.preferenceManager)
+            )
+            ThemeSettingsScreen(
+                viewModel = viewModel,
                 onBackClick = { navController.popBackStack() }
             )
         }

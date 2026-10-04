@@ -79,3 +79,18 @@ data class InstalledAppInfo(
     val appName: String,
     val isSystemApp: Boolean
 )
+
+enum class ThemeMode {
+    LIGHT,
+    DARK,
+    SYSTEM
+}
+
+enum class AccentTheme(val displayName: String, val primaryColorHex: Long) {
+    ORANGE("Mechanical Orange", 0xFFFF5520),
+    GREEN("Terminal Emerald", 0xFF10B981),
+    BLUE("Blueprint Cyan", 0xFF0284C7),
+    PURPLE("Cyber Violet", 0xFF8B5CF6),
+    AMBER("Analog Amber", 0xFFD97706)
+}
+

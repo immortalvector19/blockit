@@ -40,9 +40,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Schedule
@@ -102,6 +104,7 @@ import com.blockit.ui.components.BlockDigitalClock
 import com.blockit.ui.components.SlideToActButton
 import com.blockit.ui.screens.strictmode.StrictModeChallengeDialog
 import com.blockit.ui.theme.BlockitOrange
+import com.blockit.ui.theme.BlockitTheme
 import com.blockit.ui.theme.CharcoalDark
 import com.blockit.ui.theme.CharcoalSurface
 import com.blockit.ui.theme.CreamBackground
@@ -160,12 +163,16 @@ fun MainDashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val colors = BlockitTheme.colors
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = CreamBackground,
+        containerColor = colors.background,
         topBar = {
             DashboardTopBar(
                 isProtected = isAccessibilityEnabled && isOverlayEnabled,
+                isDark = colors.isDark,
+                onToggleDarkMode = { viewModel.toggleDarkMode() },
                 onStatusClick = {
                     if (!isAccessibilityEnabled) {
                         context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -290,9 +297,12 @@ fun MainDashboardScreen(
 @Composable
 private fun DashboardTopBar(
     isProtected: Boolean,
+    isDark: Boolean,
+    onToggleDarkMode: () -> Unit,
     onStatusClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val colors = BlockitTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -304,10 +314,10 @@ private fun DashboardTopBar(
         Surface(
             onClick = onStatusClick,
             shape = RoundedCornerShape(20.dp),
-            color = if (isProtected) Color(0xFFE2E0D8) else Color(0xFFFFE4E6),
+            color = if (isProtected) (if (colors.isDark) colors.surfaceVariant else Color(0xFFE2E0D8)) else (if (colors.isDark) Color(0xFF451A1A) else Color(0xFFFFE4E6)),
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
-                if (isProtected) Color(0xFFD0CDC4) else Color(0xFFFDA4AF)
+                if (isProtected) colors.border else (if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFDA4AF))
             )
         ) {
             Row(
@@ -324,7 +334,7 @@ private fun DashboardTopBar(
                 Text(
                     text = if (isProtected) "Active" else "Action Req.",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
             }
         }
@@ -338,23 +348,43 @@ private fun DashboardTopBar(
                 fontSize = 26.sp,
                 letterSpacing = (-1).sp
             ),
-            color = CharcoalDark
+            color = colors.textPrimary
         )
 
-        // Right Settings Button
-        IconButton(
-            onClick = onSettingsClick,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(CreamSurface)
+        // Right Actions: Dark Mode Quick Toggle + Settings Button
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = CharcoalDark,
-                modifier = Modifier.size(20.dp)
-            )
+            IconButton(
+                onClick = onToggleDarkMode,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface)
+            ) {
+                Icon(
+                    imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                    contentDescription = if (isDark) "Switch to Light Mode" else "Switch to Dark Mode",
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }
@@ -364,13 +394,14 @@ private fun DashboardBottomBar(
     selectedTab: Int,
     onTabSelect: (Int) -> Unit
 ) {
+    val colors = BlockitTheme.colors
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 14.dp),
         shape = RoundedCornerShape(28.dp),
-        color = CreamSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD5D2CA))
+        color = colors.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
     ) {
         Row(
             modifier = Modifier
@@ -391,7 +422,11 @@ private fun DashboardBottomBar(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) CharcoalDark else Color.Transparent)
+                        .background(
+                            if (isSelected) {
+                                if (colors.isDark) colors.surfaceVariant else CharcoalDark
+                            } else Color.Transparent
+                        )
                         .clickable { onTabSelect(index) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
@@ -399,7 +434,9 @@ private fun DashboardBottomBar(
                     Icon(
                         imageVector = icon,
                         contentDescription = label,
-                        tint = if (isSelected) Color.White else Color(0xFF7A7670),
+                        tint = if (isSelected) {
+                            if (colors.isDark) colors.primary else Color.White
+                        } else colors.textMuted,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -422,6 +459,7 @@ private fun TimerTabContent(
     onStartSession: (Long, Int) -> Unit,
     onEndSession: (Long) -> Unit
 ) {
+    val colors = BlockitTheme.colors
     var selectedDurationMinutes by remember { mutableIntStateOf(15) }
     var showCustomDurationDialog by remember { mutableStateOf(false) }
 
@@ -460,8 +498,8 @@ private fun TimerTabContent(
                     onClick = onFixPermissions,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE4E6)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDA4AF))
+                    colors = CardDefaults.cardColors(containerColor = if (colors.isDark) Color(0xFF451A1A) else Color(0xFFFFE4E6)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFDA4AF))
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -473,12 +511,12 @@ private fun TimerTabContent(
                             Text(
                                 text = "Blocking Engine Needs Setup",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF9F1239)
+                                color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
                             )
                             Text(
                                 text = "Tap here to grant Accessibility & Display Over Apps so BlockIt can lock your screen.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFBE123C)
+                                color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
                             )
                         }
                     }
@@ -495,13 +533,13 @@ private fun TimerTabContent(
                         Surface(
                             onClick = { onSelectProfile(profile.id) },
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) BlockitOrange else CreamSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD0CDC4))
+                            color = if (isSelected) colors.primary else colors.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                         ) {
                             Text(
                                 text = profile.name,
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) Color.White else CharcoalDark,
+                                color = if (isSelected) Color.White else colors.textPrimary,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                             )
                         }
@@ -517,13 +555,13 @@ private fun TimerTabContent(
                 BlockDigitalClock(
                     firstValue = displayMins,
                     secondValue = displaySecs,
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
             } else {
                 BlockDigitalClock(
                     firstValue = displayHours,
                     secondValue = displayMins,
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
             }
 
@@ -582,8 +620,8 @@ private fun TimerTabContent(
                         .width(60.dp)
                         .height(180.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(CreamSurface)
-                        .border(1.dp, Color(0xFFD5D2CA), RoundedCornerShape(16.dp)),
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -596,7 +634,7 @@ private fun TimerTabContent(
                                 modifier = Modifier
                                     .width(if (index % 3 == 0) 24.dp else 12.dp)
                                     .height(2.5.dp)
-                                    .background(if (index == 2) BlockitOrange else Color(0xFFB8B5AC))
+                                    .background(if (index == 2) colors.primary else if (colors.isDark) colors.surfaceVariant else Color(0xFFB8B5AC))
                             )
                         }
                     }
@@ -625,7 +663,7 @@ private fun TimerTabContent(
         var inputMinutes by remember { mutableStateOf("25") }
         AlertDialog(
             onDismissRequest = { showCustomDurationDialog = false },
-            title = { Text("Set Custom Duration") },
+            title = { Text("Set Custom Duration", color = colors.textPrimary) },
             text = {
                 OutlinedTextField(
                     value = inputMinutes,
@@ -641,15 +679,15 @@ private fun TimerTabContent(
                     selectedDurationMinutes = parsed
                     showCustomDurationDialog = false
                 }) {
-                    Text("Set")
+                    Text("Set", color = colors.primary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCustomDurationDialog = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = colors.textMuted)
                 }
             },
-            containerColor = CreamBackground,
+            containerColor = colors.surface,
             shape = RoundedCornerShape(16.dp)
         )
     }
@@ -662,14 +700,15 @@ private fun DurationTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = BlockitTheme.colors
     Surface(
         onClick = onClick,
         modifier = modifier.height(84.dp),
         shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) CharcoalDark else CreamSurface,
+        color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (isSelected) CharcoalDark else Color(0xFFD5D2CA)
+            if (isSelected) colors.primary else colors.border
         )
     ) {
         Box(
@@ -683,7 +722,7 @@ private fun DurationTile(
                     fontSize = 15.sp,
                     lineHeight = 18.sp
                 ),
-                color = if (isSelected) Color.White else CharcoalDark,
+                color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary,
                 textAlign = TextAlign.Center
             )
         }
@@ -710,6 +749,7 @@ private fun BagsTabContent(
     onRemoveDomain: (Long) -> Unit,
     onCreateBag: (String, BlockMode) -> Unit
 ) {
+    val colors = BlockitTheme.colors
     val currentBag = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showAddDomainDialog by remember { mutableStateOf(false) }
@@ -725,8 +765,8 @@ private fun BagsTabContent(
                 onClick = onFixPermissions,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE4E6)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDA4AF))
+                colors = CardDefaults.cardColors(containerColor = if (colors.isDark) Color(0xFF451A1A) else Color(0xFFFFE4E6)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFDA4AF))
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp),
@@ -738,12 +778,12 @@ private fun BagsTabContent(
                         Text(
                             text = "Blocking Engine Needs Setup",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF9F1239)
+                            color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
                         )
                         Text(
                             text = "Tap here to grant Accessibility & Display Over Apps so BlockIt can lock your screen.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFBE123C)
+                            color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
                         )
                     }
                 }
@@ -759,7 +799,7 @@ private fun BagsTabContent(
                 Icon(
                     imageVector = Icons.Default.Luggage,
                     contentDescription = null,
-                    tint = if (isActive) BlockitOrange else Color(0xFF9E9B93),
+                    tint = if (isActive) colors.primary else colors.textMuted,
                     modifier = Modifier.size(54.dp).padding(horizontal = 6.dp)
                 )
             }
@@ -778,14 +818,15 @@ private fun BagsTabContent(
                 Surface(
                     onClick = { onSelectProfile(profile.id) },
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isSelected) CharcoalDark else CreamSurface,
+                    color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
                     modifier = Modifier.weight(1f)
                 ) {
                     Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                         Text(
                             text = profile.name,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSelected) Color.White else CharcoalDark,
+                            color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -795,9 +836,9 @@ private fun BagsTabContent(
             // Add Bag button
             IconButton(
                 onClick = { showCreateDialog = true },
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(CreamSurface)
+                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(colors.surface)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Bag", tint = CharcoalDark)
+                Icon(Icons.Default.Add, contentDescription = "Add Bag", tint = colors.textPrimary)
             }
         }
 
@@ -808,7 +849,8 @@ private fun BagsTabContent(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = CreamSurface)
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(
@@ -819,14 +861,14 @@ private fun BagsTabContent(
                         Text(
                             text = currentBag.name,
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = CharcoalDark
+                            color = colors.textPrimary
                         )
                         Switch(
                             checked = currentBag.isEnabled,
                             onCheckedChange = { onToggleProfile(currentBag.id, it) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = BlockitOrange
+                                checkedTrackColor = colors.primary
                             )
                         )
                     }
@@ -837,7 +879,7 @@ private fun BagsTabContent(
                         else
                             "The apps you pack will be blocked during focus sessions. Rest of phone stays normal.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = CreamTextMuted
+                        color = colors.textMuted
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -851,14 +893,14 @@ private fun BagsTabContent(
                             onClick = { onSetBagMode(currentBag.id, BlockMode.WHITELIST) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
-                            color = if (currentBag.blockMode == BlockMode.WHITELIST) CharcoalDark else Color.Transparent,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD0CDC4))
+                            color = if (currentBag.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (currentBag.blockMode == BlockMode.WHITELIST) colors.primary else colors.border)
                         ) {
                             Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                                 Text(
                                     text = "🔒 Whitelist",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (currentBag.blockMode == BlockMode.WHITELIST) Color.White else CharcoalDark
+                                    color = if (currentBag.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
                                 )
                             }
                         }
@@ -866,14 +908,14 @@ private fun BagsTabContent(
                             onClick = { onSetBagMode(currentBag.id, BlockMode.BLACKLIST) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
-                            color = if (currentBag.blockMode == BlockMode.BLACKLIST) CharcoalDark else Color.Transparent,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD0CDC4))
+                            color = if (currentBag.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (currentBag.blockMode == BlockMode.BLACKLIST) colors.primary else colors.border)
                         ) {
                             Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                                 Text(
                                     text = "🛡️ Blacklist",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (currentBag.blockMode == BlockMode.BLACKLIST) Color.White else CharcoalDark
+                                    color = if (currentBag.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
                                 )
                             }
                         }
@@ -887,7 +929,7 @@ private fun BagsTabContent(
             Text(
                 text = if (currentBag.blockMode == BlockMode.WHITELIST) "Packed Apps (Stay Usable)" else "Packed Apps (Blocked)",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = CharcoalDark
+                color = colors.textPrimary
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -905,15 +947,15 @@ private fun BagsTabContent(
                                 Surface(
                                     modifier = Modifier.weight(1f).height(92.dp),
                                     shape = RoundedCornerShape(14.dp),
-                                    color = CreamSurface,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD5D2CA))
+                                    color = colors.surface,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize().padding(6.dp)) {
                                         IconButton(
                                             onClick = { onRemoveApp(currentBag.id, app.packageName) },
                                             modifier = Modifier.size(18.dp).align(Alignment.TopEnd)
                                         ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color(0xFF8C8881), modifier = Modifier.size(14.dp))
+                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = colors.textMuted, modifier = Modifier.size(14.dp))
                                         }
                                         Column(
                                             modifier = Modifier.fillMaxSize(),
@@ -925,7 +967,7 @@ private fun BagsTabContent(
                                             Text(
                                                 text = app.appName,
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = CharcoalDark,
+                                                color = colors.textPrimary,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 textAlign = TextAlign.Center
@@ -940,16 +982,16 @@ private fun BagsTabContent(
                                     modifier = Modifier.weight(1f).height(92.dp),
                                     shape = RoundedCornerShape(14.dp),
                                     color = Color.Transparent,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC8C5BD))
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                                 ) {
                                     Column(
                                         modifier = Modifier.fillMaxSize(),
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.Center
                                     ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Add", tint = BlockitOrange, modifier = Modifier.size(28.dp))
+                                        Icon(Icons.Default.Add, contentDescription = "Add", tint = colors.primary, modifier = Modifier.size(28.dp))
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text("Pack App", style = MaterialTheme.typography.labelSmall, color = CreamTextMuted)
+                                        Text("Pack App", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
                                     }
                                 }
                             }
@@ -973,10 +1015,10 @@ private fun BagsTabContent(
                 Text(
                     text = "Websites (${packedDomains.size})",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
                 TextButton(onClick = { showAddDomainDialog = true }) {
-                    Text("+ Add Domain", color = BlockitOrange, fontWeight = FontWeight.Bold)
+                    Text("+ Add Domain", color = colors.primary, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -984,7 +1026,7 @@ private fun BagsTabContent(
                 Text(
                     text = "No websites added yet. Add domains like 'instagram.com' or '*.reddit.com'.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = CreamTextMuted
+                    color = colors.textMuted
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -992,19 +1034,20 @@ private fun BagsTabContent(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
-                            color = CreamSurface
+                            color = colors.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(domain.pattern, style = MaterialTheme.typography.bodyMedium, color = CharcoalDark)
+                                Text(domain.pattern, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
                                 IconButton(
                                     onClick = { onRemoveDomain(domain.id) },
                                     modifier = Modifier.size(24.dp)
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Delete", tint = Color(0xFF8C8881), modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Close, contentDescription = "Delete", tint = colors.textMuted, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -1020,7 +1063,7 @@ private fun BagsTabContent(
 
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text("New Bag", fontWeight = FontWeight.Bold) },
+            title = { Text("New Bag", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
             text = {
                 Column {
                     OutlinedTextField(
@@ -1031,26 +1074,28 @@ private fun BagsTabContent(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Bag Type:", style = MaterialTheme.typography.labelMedium)
+                    Text("Bag Type:", style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { bagMode = BlockMode.WHITELIST },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (bagMode == BlockMode.WHITELIST) BlockitOrange else CreamSurface
+                                containerColor = if (bagMode == BlockMode.WHITELIST) colors.primary else colors.surface
                             ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (bagMode == BlockMode.WHITELIST) colors.primary else colors.border),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Whitelist", color = if (bagMode == BlockMode.WHITELIST) Color.White else CharcoalDark)
+                            Text("Whitelist", color = if (bagMode == BlockMode.WHITELIST) Color.White else colors.textPrimary)
                         }
                         Button(
                             onClick = { bagMode = BlockMode.BLACKLIST },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (bagMode == BlockMode.BLACKLIST) BlockitOrange else CreamSurface
+                                containerColor = if (bagMode == BlockMode.BLACKLIST) colors.primary else colors.surface
                             ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (bagMode == BlockMode.BLACKLIST) colors.primary else colors.border),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Blacklist", color = if (bagMode == BlockMode.BLACKLIST) Color.White else CharcoalDark)
+                            Text("Blacklist", color = if (bagMode == BlockMode.BLACKLIST) Color.White else colors.textPrimary)
                         }
                     }
                 }
@@ -1062,13 +1107,13 @@ private fun BagsTabContent(
                         showCreateDialog = false
                     }
                 }) {
-                    Text("Create")
+                    Text("Create", color = colors.primary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showCreateDialog = false }) { Text("Cancel", color = colors.textMuted) }
             },
-            containerColor = CreamBackground,
+            containerColor = colors.surface,
             shape = RoundedCornerShape(16.dp)
         )
     }
@@ -1079,7 +1124,7 @@ private fun BagsTabContent(
 
         AlertDialog(
             onDismissRequest = { showAddDomainDialog = false },
-            title = { Text("Block Domain") },
+            title = { Text("Block Domain", color = colors.textPrimary) },
             text = {
                 Column {
                     OutlinedTextField(
@@ -1098,13 +1143,13 @@ private fun BagsTabContent(
                         showAddDomainDialog = false
                     }
                 }) {
-                    Text("Add")
+                    Text("Add", color = colors.primary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddDomainDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showAddDomainDialog = false }) { Text("Cancel", color = colors.textMuted) }
             },
-            containerColor = CreamBackground,
+            containerColor = colors.surface,
             shape = RoundedCornerShape(16.dp)
         )
     }
@@ -1122,6 +1167,7 @@ private fun RoutinesTabContent(
     onSaveSchedule: (Schedule) -> Unit,
     onDeleteSchedule: (Long) -> Unit
 ) {
+    val colors = BlockitTheme.colors
     val currentBag = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
 
     Column(
@@ -1142,7 +1188,7 @@ private fun RoutinesTabContent(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Black
                 ),
-                color = CharcoalDark
+                color = colors.textPrimary
             )
             Text(
                 "24:00",
@@ -1150,7 +1196,7 @@ private fun RoutinesTabContent(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Black
                 ),
-                color = CharcoalDark
+                color = colors.textPrimary
             )
         }
 
@@ -1162,13 +1208,13 @@ private fun RoutinesTabContent(
                 .fillMaxWidth()
                 .height(6.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(Color(0xFFD6D4CC))
+                .background(if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.35f)
                     .fillMaxSize()
-                    .background(BlockitOrange)
+                    .background(colors.primary)
             )
         }
 
@@ -1185,13 +1231,13 @@ private fun RoutinesTabContent(
                     Surface(
                         onClick = { onSelectProfile(profile.id) },
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) BlockitOrange else CreamSurface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD0CDC4))
+                        color = if (isSelected) colors.primary else colors.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                     ) {
                         Text(
                             text = profile.name,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSelected) Color.White else CharcoalDark,
+                            color = if (isSelected) Color.White else colors.textPrimary,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                         )
                     }
@@ -1202,12 +1248,12 @@ private fun RoutinesTabContent(
         Text(
             text = "Control center",
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = CharcoalDark
+            color = colors.textPrimary
         )
         Text(
             text = "Routines start a block on their own, at the time you set, on the days you pick.",
             style = MaterialTheme.typography.bodySmall,
-            color = CreamTextMuted
+            color = colors.textMuted
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -1216,7 +1262,8 @@ private fun RoutinesTabContent(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = CreamSurface)
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -1225,13 +1272,13 @@ private fun RoutinesTabContent(
                     Text(
                         "No automated routines active.",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = CharcoalDark
+                        color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         "Add a schedule to lock distractions automatically (e.g. 09:00 - 17:00 Mon-Fri).",
                         style = MaterialTheme.typography.bodySmall,
-                        color = CreamTextMuted,
+                        color = colors.textMuted,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(14.dp))
@@ -1249,10 +1296,15 @@ private fun RoutinesTabContent(
                                 )
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = CharcoalDark),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
+                        ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Add Workday Routine (9am - 5pm)")
+                        Text(
+                            "Add Workday Routine (9am - 5pm)",
+                            color = if (colors.isDark) colors.primary else Color.White
+                        )
                     }
                 }
             }
@@ -1284,11 +1336,12 @@ private fun RoutineCard(
     onDelete: () -> Unit,
     onUpdateDays: (Int) -> Unit
 ) {
+    val colors = BlockitTheme.colors
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CreamSurface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD5D2CA))
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -1302,7 +1355,7 @@ private fun RoutineCard(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold
                     ),
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
@@ -1310,12 +1363,12 @@ private fun RoutineCard(
                         onCheckedChange = onToggle,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
-                            checkedTrackColor = BlockitOrange
+                            checkedTrackColor = colors.primary
                         )
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFF8C8881), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.textMuted, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -1335,7 +1388,7 @@ private fun RoutineCard(
                     fontWeight = FontWeight.Black,
                     fontSize = 24.sp
                 ),
-                color = CharcoalDark
+                color = colors.textPrimary
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -1353,7 +1406,7 @@ private fun RoutineCard(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isDayActive) BlockitOrange else Color(0xFFD6D4CC))
+                            .background(if (isDayActive) colors.primary else (if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC)))
                             .clickable {
                                 val newMask = schedule.daysOfWeekMask xor bit
                                 onUpdateDays(newMask)
@@ -1363,7 +1416,7 @@ private fun RoutineCard(
                         Text(
                             text = letter,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isDayActive) Color.White else CharcoalDark
+                            color = if (isDayActive) Color.White else colors.textPrimary
                         )
                     }
                 }
@@ -1379,6 +1432,7 @@ private fun RoutineCard(
 private fun StatisticsTabContent(
     insightsData: UsageInsightsData
 ) {
+    val colors = BlockitTheme.colors
     var selectedFilter by remember { mutableIntStateOf(0) } // 0: Day, 1: Month, 2: Year
 
     Column(
@@ -1399,7 +1453,7 @@ private fun StatisticsTabContent(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold
                 ),
-                color = CharcoalDark
+                color = colors.textPrimary
             )
             Text(
                 text = "${insightsData.estimatedMinutesSaved} MIN",
@@ -1407,7 +1461,7 @@ private fun StatisticsTabContent(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Black
                 ),
-                color = BlockitOrange
+                color = colors.primary
             )
         }
 
@@ -1423,14 +1477,15 @@ private fun StatisticsTabContent(
                 Surface(
                     onClick = { selectedFilter = index },
                     shape = RoundedCornerShape(10.dp),
-                    color = if (isSelected) CharcoalDark else CreamSurface,
+                    color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
                     modifier = Modifier.weight(1f)
                 ) {
                     Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                         Text(
                             text = label,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSelected) Color.White else CharcoalDark
+                            color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
                         )
                     }
                 }
@@ -1443,7 +1498,8 @@ private fun StatisticsTabContent(
         Card(
             modifier = Modifier.fillMaxWidth().height(180.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CreamSurface)
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
         ) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -1452,12 +1508,12 @@ private fun StatisticsTabContent(
                 Text(
                     text = "Statistics",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
                 Text(
                     text = "Every blocked minute ends up here: by day, month or year.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = CreamTextMuted
+                    color = colors.textMuted
                 )
 
                 // Simulated / real bar heights
@@ -1473,7 +1529,7 @@ private fun StatisticsTabContent(
                                 .width(18.dp)
                                 .fillMaxHeight(h)
                                 .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                .background(if (i == 2 || i == 6) BlockitOrange else CharcoalDark)
+                                .background(if (i == 2 || i == 6) colors.primary else (if (colors.isDark) colors.surfaceVariant else CharcoalDark))
                         )
                     }
                 }
@@ -1507,13 +1563,15 @@ private fun MetricCard(
     value: String,
     modifier: Modifier = Modifier
 ) {
+    val colors = BlockitTheme.colors
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = CreamSurface)
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.labelSmall, color = CreamTextMuted)
+            Text(title, style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = value,
@@ -1521,7 +1579,7 @@ private fun MetricCard(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Black
                 ),
-                color = CharcoalDark
+                color = colors.textPrimary
             )
         }
     }
@@ -1529,6 +1587,7 @@ private fun MetricCard(
 
 @Composable
 private fun AppIconView(packageName: String, modifier: Modifier = Modifier) {
+    val colors = BlockitTheme.colors
     val context = LocalContext.current
     val iconBitmap = remember(packageName) {
         try {
@@ -1551,7 +1610,7 @@ private fun AppIconView(packageName: String, modifier: Modifier = Modifier) {
         Image(bitmap = iconBitmap, contentDescription = null, modifier = modifier)
     } else {
         Box(
-            modifier = modifier.clip(RoundedCornerShape(8.dp)).background(BlockitOrange),
+            modifier = modifier.clip(RoundedCornerShape(8.dp)).background(colors.primary),
             contentAlignment = Alignment.Center
         ) {
             Text(

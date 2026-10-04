@@ -65,6 +65,19 @@ class MainDashboardViewModel(
             initialValue = UsageInsightsData()
         )
 
+    val themeMode: StateFlow<com.blockit.domain.model.ThemeMode> = preferenceManager.themeMode
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = com.blockit.domain.model.ThemeMode.LIGHT
+        )
+
+    fun toggleDarkMode() {
+        viewModelScope.launch {
+            preferenceManager.toggleDarkMode()
+        }
+    }
+
     private val _selectedProfileId = MutableStateFlow<Long?>(null)
     val selectedProfileId: StateFlow<Long?> = _selectedProfileId.asStateFlow()
 

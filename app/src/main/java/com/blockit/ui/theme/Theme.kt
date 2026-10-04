@@ -16,58 +16,121 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = BlockitOrange,
-    onPrimary = Color.White,
-    primaryContainer = BlockitOrangeDark,
-    secondary = CreamSurface,
-    background = DarkBackground,
-    surface = DarkSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onBackground = DarkOnSurface,
-    onSurface = DarkOnSurface,
-    error = AccentRose
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import com.blockit.domain.model.AccentTheme
+
+data class BlockitColors(
+    val isDark: Boolean,
+    val background: Color,
+    val surface: Color,
+    val surfaceVariant: Color,
+    val border: Color,
+    val textPrimary: Color,
+    val textMuted: Color,
+    val primary: Color,
+    val primaryDark: Color,
+    val primaryContainer: Color,
+    val onPrimary: Color = Color.White
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = BlockitOrange,
-    onPrimary = Color.White,
-    primaryContainer = BlockitOrangeLight,
-    secondary = CharcoalDark,
-    background = LightBackground,
-    surface = LightSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onBackground = LightOnSurface,
-    onSurface = LightOnSurface,
-    error = AccentRose
-)
+val LocalBlockitColors = staticCompositionLocalOf {
+    BlockitColors(
+        isDark = false,
+        background = MachineLightBackground,
+        surface = MachineLightSurface,
+        surfaceVariant = MachineLightSurfaceVariant,
+        border = MachineLightBorder,
+        textPrimary = MachineLightText,
+        textMuted = MachineLightTextMuted,
+        primary = BlockitOrange,
+        primaryDark = BlockitOrangeDark,
+        primaryContainer = MachineLightSurfaceVariant
+    )
+}
+
+object BlockitTheme {
+    val colors: BlockitColors
+        @Composable
+        get() = LocalBlockitColors.current
+}
 
 @Composable
 fun BlockItTheme(
     darkTheme: Boolean = false,
-    dynamicColor: Boolean = false,
+    accentTheme: AccentTheme = AccentTheme.ORANGE,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val primaryColor = Color(accentTheme.primaryColorHex)
+    val blockitColors = if (darkTheme) {
+        BlockitColors(
+            isDark = true,
+            background = MachineDarkBackground,
+            surface = MachineDarkSurface,
+            surfaceVariant = MachineDarkSurfaceVariant,
+            border = MachineDarkBorder,
+            textPrimary = MachineDarkText,
+            textMuted = MachineDarkTextMuted,
+            primary = primaryColor,
+            primaryDark = primaryColor,
+            primaryContainer = MachineDarkSurfaceVariant
+        )
+    } else {
+        BlockitColors(
+            isDark = false,
+            background = MachineLightBackground,
+            surface = MachineLightSurface,
+            surfaceVariant = MachineLightSurfaceVariant,
+            border = MachineLightBorder,
+            textPrimary = MachineLightText,
+            textMuted = MachineLightTextMuted,
+            primary = primaryColor,
+            primaryDark = primaryColor,
+            primaryContainer = MachineLightSurfaceVariant
+        )
+    }
+
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = primaryColor,
+            onPrimary = Color.White,
+            primaryContainer = blockitColors.surfaceVariant,
+            secondary = blockitColors.surface,
+            background = blockitColors.background,
+            surface = blockitColors.surface,
+            surfaceVariant = blockitColors.surfaceVariant,
+            onBackground = blockitColors.textPrimary,
+            onSurface = blockitColors.textPrimary,
+            error = MachineRed
+        )
+    } else {
+        lightColorScheme(
+            primary = primaryColor,
+            onPrimary = Color.White,
+            primaryContainer = blockitColors.surfaceVariant,
+            secondary = CharcoalDark,
+            background = blockitColors.background,
+            surface = blockitColors.surface,
+            surfaceVariant = blockitColors.surfaceVariant,
+            onBackground = blockitColors.textPrimary,
+            onSurface = blockitColors.textPrimary,
+            error = MachineRed
+        )
     }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            window.statusBarColor = colorScheme.background.toArgb()
+            window.statusBarColor = blockitColors.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        content = content
-    )
+    CompositionLocalProvider(LocalBlockitColors provides blockitColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            content = content
+        )
+    }
 }

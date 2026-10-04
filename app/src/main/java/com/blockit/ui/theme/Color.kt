@@ -22,6 +22,29 @@ val CreamTextMuted = Color(0xFF7A7670)
 val MachineGreen = Color(0xFF22C55E)
 val MachineRed = Color(0xFFEF4444)
 
+// Dark Mode Machine Palette
+val MachineDarkBackground = Color(0xFF191817) // Deep obsidian charcoal body
+val MachineDarkSurface = Color(0xFF262422)    // Dark mechanical panel surface
+val MachineDarkSurfaceVariant = Color(0xFF33302D)
+val MachineDarkBorder = Color(0xFF3D3A37)
+val MachineDarkText = Color(0xFFF5F4F0)       // Light ivory block text
+val MachineDarkTextMuted = Color(0xFF9E9B93)  // Muted steel text
+
+// Light Mode Machine Palette
+val MachineLightBackground = Color(0xFFECEBE6) // Warm analog cream paper
+val MachineLightSurface = Color(0xFFE2E0D8)    // Warm card panel
+val MachineLightSurfaceVariant = Color(0xFFD6D4CC)
+val MachineLightBorder = Color(0xFFD5D2CA)
+val MachineLightText = Color(0xFF2B2826)       // Deep charcoal machine text
+val MachineLightTextMuted = Color(0xFF7A7670)
+
+// Accent Themes
+val AccentOrange = Color(0xFFFF5520)
+val AccentGreen = Color(0xFF10B981)
+val AccentBlue = Color(0xFF0284C7)
+val AccentPurple = Color(0xFF8B5CF6)
+val AccentAmberGold = Color(0xFFD97706)
+
 // Backward-compatible tokens
 val Slate900 = CharcoalDark
 val Slate800 = CharcoalLight

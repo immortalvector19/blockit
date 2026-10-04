@@ -38,9 +38,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.material.icons.filled.Palette
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsHubScreen(
+    onNavigateToThemeSettings: () -> Unit,
     onNavigateToStrictMode: () -> Unit,
     onNavigateToSetupGuide: () -> Unit,
     onNavigateToBackupRestore: () -> Unit,
@@ -76,6 +79,13 @@ fun SettingsHubScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            SettingsNavigationCard(
+                title = "Appearance & Themes",
+                subtitle = "Dark mode toggle, cream paper aesthetic, and mechanical accent palettes",
+                icon = Icons.Default.Palette,
+                onClick = onNavigateToThemeSettings
+            )
+
             SettingsNavigationCard(
                 title = "Strict Mode & Anti-Bypass",
                 subtitle = "Friction challenges, cooldown delays, and anti-uninstall Device Admin locks",

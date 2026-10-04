@@ -26,6 +26,8 @@ class PreferenceManager(private val context: Context) {
         val STRICT_MODE_PASSAGE = stringPreferencesKey("strict_mode_passage")
         val VPN_FILTER_ENABLED = booleanPreferencesKey("vpn_filter_enabled")
         val ACCESSIBILITY_URL_ENABLED = booleanPreferencesKey("accessibility_url_enabled")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val ACCENT_THEME = stringPreferencesKey("accent_theme")
     }
 
     val onboardingCompleted: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -74,5 +76,48 @@ class PreferenceManager(private val context: Context) {
 
     suspend fun setAccessibilityUrlEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.ACCESSIBILITY_URL_ENABLED] = enabled }
+    }
+
+    val themeMode: Flow<com.blockit.domain.model.ThemeMode> = context.dataStore.data.map { preferences ->
+        try {
+            com.blockit.domain.model.ThemeMode.valueOf(
+                preferences[Keys.THEME_MODE] ?: com.blockit.domain.model.ThemeMode.LIGHT.name
+            )
+        } catch (_: Exception) {
+            com.blockit.domain.model.ThemeMode.LIGHT
+        }
+    }
+
+    val accentTheme: Flow<com.blockit.domain.model.AccentTheme> = context.dataStore.data.map { preferences ->
+        try {
+            com.blockit.domain.model.AccentTheme.valueOf(
+                preferences[Keys.ACCENT_THEME] ?: com.blockit.domain.model.AccentTheme.ORANGE.name
+            )
+        } catch (_: Exception) {
+            com.blockit.domain.model.AccentTheme.ORANGE
+        }
+    }
+
+    suspend fun setThemeMode(mode: com.blockit.domain.model.ThemeMode) {
+        context.dataStore.edit { it[Keys.THEME_MODE] = mode.name }
+    }
+
+    suspend fun setAccentTheme(theme: com.blockit.domain.model.AccentTheme) {
+        context.dataStore.edit { it[Keys.ACCENT_THEME] = theme.name }
+    }
+
+    suspend fun toggleDarkMode() {
+        context.dataStore.edit { prefs ->
+            val current = try {
+                com.blockit.domain.model.ThemeMode.valueOf(prefs[Keys.THEME_MODE] ?: com.blockit.domain.model.ThemeMode.LIGHT.name)
+            } catch (_: Exception) {
+                com.blockit.domain.model.ThemeMode.LIGHT
+            }
+            prefs[Keys.THEME_MODE] = if (current == com.blockit.domain.model.ThemeMode.DARK) {
+                com.blockit.domain.model.ThemeMode.LIGHT.name
+            } else {
+                com.blockit.domain.model.ThemeMode.DARK.name
+            }
+        }
     }
 }

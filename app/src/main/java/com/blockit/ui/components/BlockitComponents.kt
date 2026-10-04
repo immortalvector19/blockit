@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blockit.ui.theme.BlockitOrange
+import com.blockit.ui.theme.BlockitTheme
 import com.blockit.ui.theme.CharcoalDark
 import com.blockit.ui.theme.CreamSurface
 import kotlin.math.roundToInt
@@ -176,6 +177,7 @@ fun AnalogLever(
 ) {
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val colors = BlockitTheme.colors
     var offsetY by remember { mutableFloatStateOf(0f) }
     val maxDragPx = with(density) { (leverHeight - 56.dp).toPx() }
 
@@ -184,8 +186,8 @@ fun AnalogLever(
             .width(leverWidth)
             .height(leverHeight)
             .clip(RoundedCornerShape(16.dp))
-            .background(CreamSurface)
-            .border(1.dp, Color(0xFFD5D2CA), RoundedCornerShape(16.dp)),
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.TopCenter
     ) {
         // Vertical dashed tick marks inside the track
@@ -201,7 +203,7 @@ fun AnalogLever(
                     modifier = Modifier
                         .size(4.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFB8B5AC))
+                        .background(colors.textMuted.copy(alpha = 0.5f))
                 )
             }
         }
@@ -212,7 +214,7 @@ fun AnalogLever(
                 .offset { IntOffset(0, offsetY.roundToInt()) }
                 .size(width = 54.dp, height = 48.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(CharcoalDark)
+                .background(colors.textPrimary)
                 .draggable(
                     orientation = Orientation.Vertical,
                     state = rememberDraggableState { delta ->
@@ -256,6 +258,7 @@ fun SlideToActButton(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val colors = BlockitTheme.colors
     var offsetX by remember { mutableFloatStateOf(0f) }
 
     BoxWithConstraints(
@@ -263,10 +266,10 @@ fun SlideToActButton(
             .fillMaxWidth()
             .height(60.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(if (isActive) Color(0xFF291B24) else Color(0xFFE2E0D8))
+            .background(if (isActive) Color(0xFF291B24) else colors.surface)
             .border(
                 1.dp,
-                if (isActive) Color(0xFFDC2626).copy(alpha = 0.5f) else Color(0xFFD0CDC4),
+                if (isActive) Color(0xFFDC2626).copy(alpha = 0.5f) else colors.border,
                 RoundedCornerShape(18.dp)
             ),
         contentAlignment = Alignment.CenterStart
@@ -284,7 +287,7 @@ fun SlideToActButton(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp
                 ),
-                color = if (isActive) Color(0xFFF87171) else Color(0xFF7A7670)
+                color = if (isActive) Color(0xFFF87171) else colors.textMuted
             )
         }
 
@@ -301,7 +304,7 @@ fun SlideToActButton(
                 .size(60.dp)
                 .padding(4.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (isActive) Color(0xFFDC2626) else CharcoalDark)
+                .background(if (isActive) Color(0xFFDC2626) else colors.primary)
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
