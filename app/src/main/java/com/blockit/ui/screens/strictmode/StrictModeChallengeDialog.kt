@@ -1,6 +1,7 @@
 package com.blockit.ui.screens.strictmode
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,6 +71,14 @@ fun StrictModeChallengeDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 when (config.challengeType) {
+                    ChallengeType.PIN_PASSWORD -> {
+                        PinPasswordChallengeContent(
+                            configuredPin = config.unlockPin,
+                            cooldownFallbackSeconds = config.cooldownSeconds,
+                            onCorrectlyEntered = onChallengeCompleted,
+                            onCancel = onDismiss
+                        )
+                    }
                     ChallengeType.COOLDOWN -> {
                         CooldownChallengeContent(
                             totalSeconds = config.cooldownSeconds,
@@ -90,6 +99,143 @@ fun StrictModeChallengeDialog(
         confirmButton = {},
         dismissButton = {}
     )
+}
+
+@Composable
+private fun PinPasswordChallengeContent(
+    configuredPin: String,
+    cooldownFallbackSeconds: Int,
+    onCorrectlyEntered: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var enteredPin by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showEmergencyCooldown by remember { mutableStateOf(false) }
+
+    if (showEmergencyCooldown) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Emergency Unlock via Cooldown",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Take a mindful pause while the timer elapses to unlock without a PIN.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            CooldownChallengeContent(
+                totalSeconds = cooldownFallbackSeconds.coerceAtLeast(30),
+                onTimeElapsed = onCorrectlyEntered,
+                onCancel = { showEmergencyCooldown = false }
+            )
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (configuredPin.isBlank()) "Enter 4 digits to confirm unlock:" else "Enter your 4-digit PIN to unlock:",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Visual PIN Dots Indicator
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            repeat(4) { index ->
+                val isFilled = index < enteredPin.length
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(
+                            if (isFilled) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                )
+            }
+        }
+
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = errorMessage!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Hidden input / Numpad interface
+        OutlinedTextField(
+            value = enteredPin,
+            onValueChange = { input ->
+                val digits = input.filter { it.isDigit() }.take(4)
+                enteredPin = digits
+                errorMessage = null
+                if (digits.length == 4) {
+                    if (configuredPin.isBlank() || digits == configuredPin) {
+                        onCorrectlyEntered()
+                    } else {
+                        errorMessage = "Incorrect PIN. Try again."
+                        enteredPin = ""
+                    }
+                }
+            },
+            label = { Text("4-Digit PIN") },
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+            ),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onCancel) {
+                Text("Cancel")
+            }
+
+            if (configuredPin.isNotBlank()) {
+                TextButton(onClick = { showEmergencyCooldown = true }) {
+                    Text("Forgot PIN?", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Button(
+                onClick = {
+                    if (configuredPin.isBlank() || enteredPin == configuredPin) {
+                        onCorrectlyEntered()
+                    } else {
+                        errorMessage = "Incorrect PIN. Try again."
+                        enteredPin = ""
+                    }
+                },
+                enabled = enteredPin.length == 4,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Unlock")
+            }
+        }
+    }
 }
 
 @Composable

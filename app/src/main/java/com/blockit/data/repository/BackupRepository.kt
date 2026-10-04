@@ -63,7 +63,9 @@ class BackupRepository(
             challengeType = strictMode.challengeType.name,
             cooldownSeconds = strictMode.cooldownSeconds,
             targetPassage = strictMode.targetPassage,
-            protectSettings = strictMode.protectSettings
+            protectSettings = strictMode.protectSettings,
+            unlockPin = strictMode.unlockPin,
+            requirePinToStopSession = strictMode.requirePinToStopSession
         )
 
         val payload = BackupPayload(
@@ -137,7 +139,7 @@ class BackupRepository(
                 val challengeType = try {
                     ChallengeType.valueOf(sm.challengeType)
                 } catch (_: Exception) {
-                    ChallengeType.COOLDOWN
+                    ChallengeType.PIN_PASSWORD
                 }
                 preferenceManager.updateStrictMode(
                     StrictModeConfig(
@@ -145,7 +147,9 @@ class BackupRepository(
                         cooldownSeconds = sm.cooldownSeconds,
                         challengeType = challengeType,
                         protectSettings = sm.protectSettings,
-                        targetPassage = sm.targetPassage
+                        targetPassage = sm.targetPassage,
+                        unlockPin = sm.unlockPin,
+                        requirePinToStopSession = sm.requirePinToStopSession
                     )
                 )
             }

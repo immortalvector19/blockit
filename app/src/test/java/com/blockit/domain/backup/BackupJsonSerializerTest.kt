@@ -38,10 +38,12 @@ class BackupJsonSerializerTest {
             ),
             strictMode = StrictModeBackup(
                 isEnabled = true,
-                challengeType = "TYPED_PASSAGE",
+                challengeType = "PIN_PASSWORD",
                 cooldownSeconds = 60,
                 targetPassage = "Focus on what matters.",
-                protectSettings = true
+                protectSettings = true,
+                unlockPin = "8899",
+                requirePinToStopSession = true
             )
         )
 
@@ -49,6 +51,7 @@ class BackupJsonSerializerTest {
         assertTrue(json.contains("Deep Work"))
         assertTrue(json.contains("*.youtube.com"))
         assertTrue(json.contains("Focus on what matters."))
+        assertTrue(json.contains("8899"))
 
         val deserialized = BackupJsonSerializer.deserialize(json)
 
@@ -71,10 +74,12 @@ class BackupJsonSerializerTest {
         assertNotNull(deserialized.strictMode)
         val sm = deserialized.strictMode!!
         assertTrue(sm.isEnabled)
-        assertEquals("TYPED_PASSAGE", sm.challengeType)
+        assertEquals("PIN_PASSWORD", sm.challengeType)
         assertEquals(60, sm.cooldownSeconds)
         assertEquals("Focus on what matters.", sm.targetPassage)
         assertTrue(sm.protectSettings)
+        assertEquals("8899", sm.unlockPin)
+        assertTrue(sm.requirePinToStopSession)
     }
 
     @Test

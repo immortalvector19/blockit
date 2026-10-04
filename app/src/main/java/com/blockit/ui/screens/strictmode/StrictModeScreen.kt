@@ -194,6 +194,15 @@ fun StrictModeScreen(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
+                            selected = config.challengeType == ChallengeType.PIN_PASSWORD,
+                            onClick = {
+                                scope.launch {
+                                    preferenceManager.updateStrictMode(config.copy(challengeType = ChallengeType.PIN_PASSWORD))
+                                }
+                            },
+                            label = { Text("PIN Lock") }
+                        )
+                        FilterChip(
                             selected = config.challengeType == ChallengeType.COOLDOWN,
                             onClick = {
                                 scope.launch {
@@ -215,7 +224,54 @@ fun StrictModeScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    if (config.challengeType == ChallengeType.COOLDOWN) {
+                    if (config.challengeType == ChallengeType.PIN_PASSWORD) {
+                        Text("Security PIN", style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        var pinInput by remember(config.unlockPin) { mutableStateOf(config.unlockPin) }
+                        OutlinedTextField(
+                            value = pinInput,
+                            onValueChange = { input ->
+                                val digits = input.filter { it.isDigit() }.take(4)
+                                pinInput = digits
+                                scope.launch {
+                                    preferenceManager.updateStrictMode(config.copy(unlockPin = digits))
+                                }
+                            },
+                            label = { Text("4-Digit Security PIN") },
+                            placeholder = { Text("e.g. 1234") },
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Require PIN to Stop Session", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "Prevents stopping or cancelling active focus sessions without the PIN.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                )
+                            }
+                            Switch(
+                                checked = config.requirePinToStopSession,
+                                onCheckedChange = { req ->
+                                    scope.launch {
+                                        preferenceManager.updateStrictMode(config.copy(requirePinToStopSession = req))
+                                    }
+                                }
+                            )
+                        }
+                    } else if (config.challengeType == ChallengeType.COOLDOWN) {
                         Text("Cooldown Duration", style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

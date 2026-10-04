@@ -62,6 +62,7 @@ data class BlockEvent(
 )
 
 enum class ChallengeType {
+    PIN_PASSWORD,
     COOLDOWN,
     TYPED_PASSAGE
 }
@@ -69,9 +70,11 @@ enum class ChallengeType {
 data class StrictModeConfig(
     val isEnabled: Boolean = false,
     val cooldownSeconds: Int = 60,
-    val challengeType: ChallengeType = ChallengeType.COOLDOWN,
+    val challengeType: ChallengeType = ChallengeType.PIN_PASSWORD,
     val protectSettings: Boolean = true,
-    val targetPassage: String = "I choose focus and clarity over momentary distraction."
+    val targetPassage: String = "I choose focus and clarity over momentary distraction.",
+    val unlockPin: String = "",
+    val requirePinToStopSession: Boolean = true
 )
 
 data class InstalledAppInfo(

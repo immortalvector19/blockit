@@ -39,6 +39,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DateRange
@@ -135,6 +136,8 @@ fun MainDashboardScreen(
     // Strict Mode friction state
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var pendingDescription by remember { mutableStateOf("") }
+    var showStopConfirmDialog by remember { mutableStateOf(false) }
+    var pendingStopSessionId by remember { mutableStateOf<Long?>(null) }
 
     // Live permission check
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
@@ -223,11 +226,13 @@ fun MainDashboardScreen(
                         onSelectProfile = { viewModel.selectProfile(it) },
                         onStartSession = { profId, mins -> viewModel.startSession(profId, mins) },
                         onEndSession = { sessId ->
-                            if (strictConfig.isEnabled) {
+                            val hasPinLock = strictConfig.unlockPin.isNotBlank() && strictConfig.requirePinToStopSession
+                            if (strictConfig.isEnabled || hasPinLock) {
                                 pendingDescription = "stop the ongoing focus session early"
                                 pendingAction = { viewModel.endSession(sessId) }
                             } else {
-                                viewModel.endSession(sessId)
+                                showStopConfirmDialog = true
+                                pendingStopSessionId = sessId
                             }
                         },
                         onNavigateToProfiles = { selectedTab = 1 }
@@ -296,6 +301,57 @@ fun MainDashboardScreen(
                     onChallengeCompleted = {
                         pendingAction?.invoke()
                         pendingAction = null
+                    }
+                )
+            }
+
+            if (showStopConfirmDialog && pendingStopSessionId != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showStopConfirmDialog = false
+                        pendingStopSessionId = null
+                    },
+                    title = {
+                        Text(
+                            text = "Stop Focus Session Early?",
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Are you sure you want to stop? Ending early interrupts your momentum and discipline.",
+                                color = colors.textMuted
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Tip: Configure a 4-Digit PIN Lock in Settings to prevent stopping impulsively.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.primary
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val id = pendingStopSessionId
+                                showStopConfirmDialog = false
+                                pendingStopSessionId = null
+                                if (id != null) viewModel.endSession(id)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Stop Session")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showStopConfirmDialog = false
+                            pendingStopSessionId = null
+                        }) {
+                            Text("Keep Focusing", color = colors.primary)
+                        }
                     }
                 )
             }
@@ -481,6 +537,7 @@ private fun TimerTabContent(
     val colors = BlockitTheme.colors
     var selectedDurationMinutes by remember { mutableIntStateOf(15) }
     var showCustomDurationDialog by remember { mutableStateOf(false) }
+    var showProfilePickerDialog by remember { mutableStateOf(false) }
 
     // Live remaining time countdown
     val now = System.currentTimeMillis()
@@ -537,73 +594,6 @@ private fun TimerTabContent(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
                             )
-                        }
-                    }
-                }
-            }
-
-            // Target Profile Selector or Empty State
-            if (profiles.isNotEmpty()) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                ) {
-                    items(profiles) { profile ->
-                        val isSelected = profile.id == targetProfile?.id
-                        Surface(
-                            onClick = { onSelectProfile(profile.id) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) colors.primary else colors.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                        ) {
-                            Text(
-                                text = profile.name,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) Color.White else colors.textPrimary,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No Focus Profiles Yet",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = colors.textPrimary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Create a profile (e.g. Deep Work, Study, or Sleep) to pick apps and sites to block.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.textMuted,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = onNavigateToProfiles,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("+ Create Focus Profile", color = if (colors.isDark) colors.primary else Color.White)
                         }
                     }
                 }
@@ -704,7 +694,103 @@ private fun TimerTabContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        // Clean Session Profile Card
+        Card(
+            onClick = {
+                if (activeSession == null) {
+                    showProfilePickerDialog = true
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp, bottom = 8.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color = if (activeSession != null) colors.primary.copy(alpha = 0.5f) else colors.border
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (activeSession != null) colors.primary.copy(alpha = 0.15f)
+                            else if (colors.isDark) colors.surfaceVariant else Color(0xFFE2E8F0)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (activeSession != null) Icons.Default.Lock else Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = if (activeSession != null) colors.primary else colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (activeSession != null) "Locking: ${targetProfile?.name ?: "Focus"}" else (targetProfile?.name ?: "No Profile Selected"),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.textPrimary
+                        )
+                        if (targetProfile != null) {
+                            val isWhitelist = targetProfile.blockMode == BlockMode.WHITELIST
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isWhitelist) colors.primary.copy(alpha = 0.15f) else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF),
+                            ) {
+                                Text(
+                                    text = if (isWhitelist) "Whitelist" else "Blacklist",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                                    color = if (isWhitelist) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = when {
+                            targetProfile == null -> "Tap to create or choose a profile"
+                            targetProfile.blockMode == BlockMode.WHITELIST -> "${targetProfile.appCount} permitted apps • All other apps locked"
+                            else -> "${targetProfile.appCount} apps & ${targetProfile.domainCount} sites blocked"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted
+                    )
+                }
+
+                if (activeSession == null) {
+                    Surface(
+                        onClick = { showProfilePickerDialog = true },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                    ) {
+                        Text(
+                            text = "Change",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Slide to Start / Slide to Stop
         val targetId = targetProfile?.id
@@ -724,6 +810,79 @@ private fun TimerTabContent(
                     onNavigateToProfiles()
                 }
             }
+        )
+    }
+
+    if (showProfilePickerDialog) {
+        AlertDialog(
+            onDismissRequest = { showProfilePickerDialog = false },
+            title = { Text("Select Focus Profile", color = colors.textPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (profiles.isEmpty()) {
+                        Text(
+                            "No profiles exist yet. Create a profile to choose which apps and websites to block.",
+                            color = colors.textMuted
+                        )
+                    } else {
+                        profiles.forEach { prof ->
+                            val isSelected = prof.id == targetProfile?.id
+                            Surface(
+                                onClick = {
+                                    onSelectProfile(prof.id)
+                                    showProfilePickerDialog = false
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) colors.primary.copy(alpha = 0.12f) else colors.surface,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isSelected) colors.primary else colors.border
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = prof.name,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = if (isSelected) colors.primary else colors.textPrimary
+                                        )
+                                        Text(
+                                            text = if (prof.blockMode == BlockMode.WHITELIST)
+                                                "Whitelist • ${prof.appCount} allowed apps"
+                                            else
+                                                "Blacklist • ${prof.appCount} apps, ${prof.domainCount} sites",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colors.textMuted
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = colors.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showProfilePickerDialog = false
+                    onNavigateToProfiles()
+                }) {
+                    Text("+ Manage Profiles", color = colors.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showProfilePickerDialog = false }) {
+                    Text("Close", color = colors.textMuted)
+                }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(16.dp)
         )
     }
 

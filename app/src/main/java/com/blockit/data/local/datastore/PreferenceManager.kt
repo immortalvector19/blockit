@@ -24,6 +24,8 @@ class PreferenceManager(private val context: Context) {
         val STRICT_MODE_CHALLENGE_TYPE = stringPreferencesKey("strict_mode_challenge_type")
         val STRICT_MODE_PROTECT_SETTINGS = booleanPreferencesKey("strict_mode_protect_settings")
         val STRICT_MODE_PASSAGE = stringPreferencesKey("strict_mode_passage")
+        val STRICT_MODE_PIN = stringPreferencesKey("strict_mode_pin")
+        val STRICT_MODE_REQUIRE_PIN = booleanPreferencesKey("strict_mode_require_pin")
         val VPN_FILTER_ENABLED = booleanPreferencesKey("vpn_filter_enabled")
         val ACCESSIBILITY_URL_ENABLED = booleanPreferencesKey("accessibility_url_enabled")
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -39,12 +41,14 @@ class PreferenceManager(private val context: Context) {
             isEnabled = preferences[Keys.STRICT_MODE_ENABLED] ?: false,
             cooldownSeconds = preferences[Keys.STRICT_MODE_COOLDOWN_SECONDS] ?: 60,
             challengeType = try {
-                ChallengeType.valueOf(preferences[Keys.STRICT_MODE_CHALLENGE_TYPE] ?: ChallengeType.COOLDOWN.name)
+                ChallengeType.valueOf(preferences[Keys.STRICT_MODE_CHALLENGE_TYPE] ?: ChallengeType.PIN_PASSWORD.name)
             } catch (_: Exception) {
-                ChallengeType.COOLDOWN
+                ChallengeType.PIN_PASSWORD
             },
             protectSettings = preferences[Keys.STRICT_MODE_PROTECT_SETTINGS] ?: true,
-            targetPassage = preferences[Keys.STRICT_MODE_PASSAGE] ?: "I choose focus and clarity over momentary distraction."
+            targetPassage = preferences[Keys.STRICT_MODE_PASSAGE] ?: "I choose focus and clarity over momentary distraction.",
+            unlockPin = preferences[Keys.STRICT_MODE_PIN] ?: "",
+            requirePinToStopSession = preferences[Keys.STRICT_MODE_REQUIRE_PIN] ?: true
         )
     }
 
@@ -67,7 +71,13 @@ class PreferenceManager(private val context: Context) {
             it[Keys.STRICT_MODE_CHALLENGE_TYPE] = config.challengeType.name
             it[Keys.STRICT_MODE_PROTECT_SETTINGS] = config.protectSettings
             it[Keys.STRICT_MODE_PASSAGE] = config.targetPassage
+            it[Keys.STRICT_MODE_PIN] = config.unlockPin
+            it[Keys.STRICT_MODE_REQUIRE_PIN] = config.requirePinToStopSession
         }
+    }
+
+    suspend fun setUnlockPin(pin: String) {
+        context.dataStore.edit { it[Keys.STRICT_MODE_PIN] = pin }
     }
 
     suspend fun setVpnFilterEnabled(enabled: Boolean) {
