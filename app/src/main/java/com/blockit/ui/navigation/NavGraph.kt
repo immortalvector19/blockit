@@ -15,14 +15,17 @@ import com.blockit.ui.screens.profiles.ProfileDetailScreen
 import com.blockit.ui.screens.profiles.ProfileDetailViewModel
 import com.blockit.ui.screens.profiles.ProfilesScreen
 import com.blockit.ui.screens.profiles.ProfilesViewModel
+import com.blockit.ui.screens.schedules.ScheduleEditorScreen
 
 object NavRoutes {
     const val PROFILES = "profiles"
     const val PROFILE_DETAIL = "profile/{profileId}"
     const val ADD_APPS = "profile/{profileId}/add_apps"
+    const val SCHEDULES = "profile/{profileId}/schedules"
 
     fun profileDetail(profileId: Long) = "profile/$profileId"
     fun addApps(profileId: Long) = "profile/$profileId/add_apps"
+    fun schedules(profileId: Long) = "profile/$profileId/schedules"
 }
 
 @Composable
@@ -40,7 +43,8 @@ fun BlockItNavHost(
             val viewModel: ProfilesViewModel = viewModel(
                 factory = ProfilesViewModel.Factory(
                     container.profileRepository,
-                    container.ruleEvaluator
+                    container.ruleEvaluator,
+                    container.focusSessionManager
                 )
             )
             ProfilesScreen(
@@ -68,6 +72,9 @@ fun BlockItNavHost(
                 onBackClick = { navController.popBackStack() },
                 onAddAppsClick = { id ->
                     navController.navigate(NavRoutes.addApps(id))
+                },
+                onConfigureSchedulesClick = { id ->
+                    navController.navigate(NavRoutes.schedules(id))
                 }
             )
         }
@@ -87,6 +94,20 @@ fun BlockItNavHost(
             )
             AppsPickerScreen(
                 viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = NavRoutes.SCHEDULES,
+            arguments = listOf(navArgument("profileId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val profileId = backStackEntry.arguments?.getLong("profileId") ?: 0L
+            ScheduleEditorScreen(
+                profileId = profileId,
+                profileRepo = container.profileRepository,
+                ruleEvaluator = container.ruleEvaluator,
+                scheduleManager = container.scheduleManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

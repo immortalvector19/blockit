@@ -3,11 +3,14 @@ package com.blockit.core.di
 import android.content.Context
 import com.blockit.data.local.datastore.PreferenceManager
 import com.blockit.data.local.db.BlockItDatabase
+import com.blockit.data.repository.FocusSessionManager
 import com.blockit.data.repository.InstalledAppsRepository
 import com.blockit.data.repository.ProfileRepository
 import com.blockit.domain.evaluator.RuleEvaluator
 import com.blockit.service.overlay.OverlayController
+import com.blockit.service.receiver.ScheduleManager
 import com.blockit.service.usagestats.UsageStatsDetector
+import com.blockit.service.worker.ServiceWatchdogWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,10 +53,21 @@ class AppContainer(private val context: Context) {
         UsageStatsDetector(context)
     }
 
+    val scheduleManager: ScheduleManager by lazy {
+        ScheduleManager(context, database)
+    }
+
+    val focusSessionManager: FocusSessionManager by lazy {
+        FocusSessionManager(database, ruleEvaluator, scheduleManager)
+    }
+
     init {
-        // Prime the rule evaluator cache on startup
+        // Prime the rule evaluator cache and arm boundaries on startup
         applicationScope.launch {
             ruleEvaluator.refreshRules()
+            scheduleManager.scheduleNextBoundaryAlarm()
         }
+        // Enqueue periodic background watchdog
+        ServiceWatchdogWorker.enqueuePeriodic(context)
     }
 }

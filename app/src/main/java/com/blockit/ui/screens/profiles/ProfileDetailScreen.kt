@@ -53,12 +53,15 @@ import com.blockit.domain.matcher.DomainMatcher
 import com.blockit.domain.model.BlockedApp
 import com.blockit.domain.model.BlockedDomain
 
+import androidx.compose.material.icons.filled.Schedule
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileDetailScreen(
     viewModel: ProfileDetailViewModel,
     onBackClick: () -> Unit,
     onAddAppsClick: (Long) -> Unit,
+    onConfigureSchedulesClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val profile by viewModel.profile.collectAsState()
@@ -77,6 +80,14 @@ fun ProfileDetailScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { profile?.let { onConfigureSchedulesClick(it.id) } }) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = "Schedules"
                         )
                     }
                 },

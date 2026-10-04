@@ -1,5 +1,6 @@
 package com.blockit.ui.screens.profiles
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,15 +19,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -35,8 +42,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,7 +53,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.Profile
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +65,7 @@ fun ProfilesScreen(
     modifier: Modifier = Modifier
 ) {
     val profiles by viewModel.profiles.collectAsState()
+    val activeSession by viewModel.activeSession.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -69,7 +81,7 @@ fun ProfilesScreen(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text("BlockIt Profiles")
+                        Text("BlockIt")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -87,27 +99,48 @@ fun ProfilesScreen(
             }
         }
     ) { padding ->
-        if (profiles.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No focus profiles yet.\nTap '+' to create one.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Quick Focus Session Banner
+            item {
+                QuickFocusSessionCard(
+                    activeSession = activeSession,
+                    profiles = profiles,
+                    onStartSession = { profileId, mins -> viewModel.startQuickSession(profileId, mins) },
+                    onEndSession = { sessionId -> viewModel.endSession(sessionId) }
                 )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+
+            if (profiles.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No focus profiles yet.\nTap '+' to create one.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        text = "Profiles",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
                 items(profiles, key = { it.id }) { profile ->
                     ProfileCard(
                         profile = profile,
@@ -127,6 +160,99 @@ fun ProfilesScreen(
                     showCreateDialog = false
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun QuickFocusSessionCard(
+    activeSession: FocusSession?,
+    profiles: List<Profile>,
+    onStartSession: (Long, Int) -> Unit,
+    onEndSession: (Long) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (activeSession != null) Color(0xFF1E293B) else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            if (activeSession != null) {
+                // Active Countdown View
+                var remainingMs by remember(activeSession.endTimestamp) {
+                    mutableLongStateOf((activeSession.endTimestamp - System.currentTimeMillis()).coerceAtLeast(0))
+                }
+
+                LaunchedEffect(activeSession.endTimestamp) {
+                    while (remainingMs > 0) {
+                        delay(1000)
+                        remainingMs = (activeSession.endTimestamp - System.currentTimeMillis()).coerceAtLeast(0)
+                    }
+                }
+
+                val mins = (remainingMs / 1000) / 60
+                val secs = (remainingMs / 1000) % 60
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HourglassTop,
+                        contentDescription = null,
+                        tint = Color(0xFF818CF8)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Focus Session Active",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFFF1F5F9)
+                        )
+                        Text(
+                            text = String.format("%02d:%02d remaining", mins, secs),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+                    Button(
+                        onClick = { onEndSession(activeSession.id) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("End")
+                    }
+                }
+            } else {
+                // Inactive Session Starter View
+                Text(
+                    text = "Quick Focus Session",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "Block all distracting apps immediately:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val targetProfileId = profiles.firstOrNull()?.id ?: 1L
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(15 to "15m", 25 to "25m", 45 to "45m", 60 to "60m").forEach { (duration, label) ->
+                        OutlinedButton(
+                            onClick = { onStartSession(targetProfileId, duration) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(label)
+                        }
+                    }
+                }
+            }
         }
     }
 }
