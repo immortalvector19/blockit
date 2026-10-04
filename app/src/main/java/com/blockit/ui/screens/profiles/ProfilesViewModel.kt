@@ -3,11 +3,13 @@ package com.blockit.ui.screens.profiles
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.blockit.data.local.datastore.PreferenceManager
 import com.blockit.data.repository.FocusSessionManager
 import com.blockit.data.repository.ProfileRepository
 import com.blockit.domain.evaluator.RuleEvaluator
 import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.Profile
+import com.blockit.domain.model.StrictModeConfig
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -16,7 +18,8 @@ import kotlinx.coroutines.launch
 class ProfilesViewModel(
     private val profileRepository: ProfileRepository,
     private val ruleEvaluator: RuleEvaluator,
-    private val focusSessionManager: FocusSessionManager
+    private val focusSessionManager: FocusSessionManager,
+    private val preferenceManager: PreferenceManager
 ) : ViewModel() {
 
     val profiles: StateFlow<List<Profile>> = profileRepository.observeAllProfiles()
@@ -31,6 +34,13 @@ class ProfilesViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
+        )
+
+    val strictModeConfig: StateFlow<StrictModeConfig> = preferenceManager.strictModeConfig
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = StrictModeConfig()
         )
 
     fun toggleProfileEnabled(profileId: Long, isEnabled: Boolean) {
@@ -69,11 +79,12 @@ class ProfilesViewModel(
     class Factory(
         private val repository: ProfileRepository,
         private val evaluator: RuleEvaluator,
-        private val sessionManager: FocusSessionManager
+        private val sessionManager: FocusSessionManager,
+        private val preferenceManager: PreferenceManager
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ProfilesViewModel(repository, evaluator, sessionManager) as T
+            return ProfilesViewModel(repository, evaluator, sessionManager, preferenceManager) as T
         }
     }
 }

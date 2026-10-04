@@ -62,6 +62,24 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Strict Mode: Guard Android Settings against deactivating or uninstalling BlockIt
+        if (pkgName == "com.android.settings") {
+            val snapshot = ruleEvaluator.getSnapshot()
+            val hasActiveBlocks = snapshot.blockedPackages.isNotEmpty() || snapshot.blockedDomains.isNotEmpty()
+            if (hasActiveBlocks) {
+                val root = rootInActiveWindow ?: event.source
+                if (root != null && isSettingsTamperingAttempt(root)) {
+                    overlayController.showBlockOverlay(
+                        targetIdentifier = "Android Settings",
+                        profileName = "Strict Mode",
+                        reason = "Settings access guarded during active focus rules",
+                        onHomeClicked = { performGlobalAction(GLOBAL_ACTION_HOME) }
+                    )
+                    return
+                }
+            }
+        }
+
         // Evaluate if the foreground app is blocked
         val result = ruleEvaluator.isAppBlocked(pkgName)
         if (result.isBlocked) {
@@ -123,6 +141,22 @@ class BlockAccessibilityService : AccessibilityService() {
                 )
             } catch (_: Exception) {}
         }
+    }
+
+    private fun isSettingsTamperingAttempt(node: android.view.accessibility.AccessibilityNodeInfo, depth: Int = 0): Boolean {
+        if (depth > 6) return false
+        val text = node.text?.toString()
+        val desc = node.contentDescription?.toString()
+        if (text?.contains("BlockIt", ignoreCase = true) == true ||
+            desc?.contains("BlockIt", ignoreCase = true) == true
+        ) {
+            return true
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (isSettingsTamperingAttempt(child, depth + 1)) return true
+        }
+        return false
     }
 
     override fun onInterrupt() {

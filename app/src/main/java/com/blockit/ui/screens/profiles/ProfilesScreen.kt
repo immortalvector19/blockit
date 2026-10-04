@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -28,7 +30,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.Profile
+import com.blockit.ui.screens.strictmode.StrictModeChallengeDialog
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,11 +64,18 @@ import kotlinx.coroutines.delay
 fun ProfilesScreen(
     viewModel: ProfilesViewModel,
     onProfileClick: (Long) -> Unit,
+    onOpenSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val profiles by viewModel.profiles.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
+    val strictConfig by viewModel.strictModeConfig.collectAsState()
+
     var showCreateDialog by remember { mutableStateOf(false) }
+
+    // Strict Mode friction interception state
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingDescription by remember { mutableStateOf("") }
 
     Scaffold(
         modifier = modifier,
@@ -82,6 +91,15 @@ fun ProfilesScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text("BlockIt")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettingsClick) {
+                        Icon(
+                            imageVector = if (strictConfig.isEnabled) Icons.Default.Lock else Icons.Default.Settings,
+                            contentDescription = "Strict Mode & Settings",
+                            tint = if (strictConfig.isEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -112,7 +130,14 @@ fun ProfilesScreen(
                     activeSession = activeSession,
                     profiles = profiles,
                     onStartSession = { profileId, mins -> viewModel.startQuickSession(profileId, mins) },
-                    onEndSession = { sessionId -> viewModel.endSession(sessionId) }
+                    onEndSession = { sessionId ->
+                        if (strictConfig.isEnabled) {
+                            pendingDescription = "end the active focus session early"
+                            pendingAction = { viewModel.endSession(sessionId) }
+                        } else {
+                            viewModel.endSession(sessionId)
+                        }
+                    }
                 )
             }
 
@@ -144,9 +169,23 @@ fun ProfilesScreen(
                 items(profiles, key = { it.id }) { profile ->
                     ProfileCard(
                         profile = profile,
-                        onToggle = { isEnabled -> viewModel.toggleProfileEnabled(profile.id, isEnabled) },
+                        onToggle = { isEnabled ->
+                            if (!isEnabled && strictConfig.isEnabled) {
+                                pendingDescription = "turn off profile '${profile.name}'"
+                                pendingAction = { viewModel.toggleProfileEnabled(profile.id, false) }
+                            } else {
+                                viewModel.toggleProfileEnabled(profile.id, isEnabled)
+                            }
+                        },
                         onClick = { onProfileClick(profile.id) },
-                        onDelete = { viewModel.deleteProfile(profile.id) }
+                        onDelete = {
+                            if (strictConfig.isEnabled) {
+                                pendingDescription = "delete profile '${profile.name}'"
+                                pendingAction = { viewModel.deleteProfile(profile.id) }
+                            } else {
+                                viewModel.deleteProfile(profile.id)
+                            }
+                        }
                     )
                 }
             }
@@ -158,6 +197,18 @@ fun ProfilesScreen(
                 onConfirm = { name ->
                     viewModel.createProfile(name)
                     showCreateDialog = false
+                }
+            )
+        }
+
+        if (pendingAction != null) {
+            StrictModeChallengeDialog(
+                config = strictConfig,
+                actionDescription = pendingDescription,
+                onDismiss = { pendingAction = null },
+                onChallengeCompleted = {
+                    pendingAction?.invoke()
+                    pendingAction = null
                 }
             )
         }

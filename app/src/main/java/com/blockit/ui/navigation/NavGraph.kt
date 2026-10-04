@@ -16,12 +16,14 @@ import com.blockit.ui.screens.profiles.ProfileDetailViewModel
 import com.blockit.ui.screens.profiles.ProfilesScreen
 import com.blockit.ui.screens.profiles.ProfilesViewModel
 import com.blockit.ui.screens.schedules.ScheduleEditorScreen
+import com.blockit.ui.screens.strictmode.StrictModeScreen
 
 object NavRoutes {
     const val PROFILES = "profiles"
     const val PROFILE_DETAIL = "profile/{profileId}"
     const val ADD_APPS = "profile/{profileId}/add_apps"
     const val SCHEDULES = "profile/{profileId}/schedules"
+    const val STRICT_MODE = "settings/strict_mode"
 
     fun profileDetail(profileId: Long) = "profile/$profileId"
     fun addApps(profileId: Long) = "profile/$profileId/add_apps"
@@ -44,13 +46,17 @@ fun BlockItNavHost(
                 factory = ProfilesViewModel.Factory(
                     container.profileRepository,
                     container.ruleEvaluator,
-                    container.focusSessionManager
+                    container.focusSessionManager,
+                    container.preferenceManager
                 )
             )
             ProfilesScreen(
                 viewModel = viewModel,
                 onProfileClick = { profileId ->
                     navController.navigate(NavRoutes.profileDetail(profileId))
+                },
+                onOpenSettingsClick = {
+                    navController.navigate(NavRoutes.STRICT_MODE)
                 }
             )
         }
@@ -108,6 +114,13 @@ fun BlockItNavHost(
                 profileRepo = container.profileRepository,
                 ruleEvaluator = container.ruleEvaluator,
                 scheduleManager = container.scheduleManager,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.STRICT_MODE) {
+            StrictModeScreen(
+                preferenceManager = container.preferenceManager,
                 onBackClick = { navController.popBackStack() }
             )
         }
