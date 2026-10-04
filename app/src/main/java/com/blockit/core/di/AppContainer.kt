@@ -6,6 +6,8 @@ import com.blockit.data.local.db.BlockItDatabase
 import com.blockit.data.repository.InstalledAppsRepository
 import com.blockit.data.repository.ProfileRepository
 import com.blockit.domain.evaluator.RuleEvaluator
+import com.blockit.service.overlay.OverlayController
+import com.blockit.service.usagestats.UsageStatsDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,6 +40,14 @@ class AppContainer(private val context: Context) {
 
     val ruleEvaluator: RuleEvaluator by lazy {
         RuleEvaluator(database, applicationScope)
+    }
+
+    val overlayController: OverlayController by lazy {
+        OverlayController(context)
+    }
+
+    val usageStatsDetector: UsageStatsDetector by lazy {
+        UsageStatsDetector(context)
     }
 
     init {
