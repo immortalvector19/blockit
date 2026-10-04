@@ -111,6 +111,9 @@ dependencies {
     // Coroutine testing dispatcher and runTest harness
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
 
+    // Standalone JSON implementation for JVM unit tests to avoid Android runtime stubs
+    testImplementation("org.json:json:20231013")
+
     // Android JUnit test runner extensions
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
 

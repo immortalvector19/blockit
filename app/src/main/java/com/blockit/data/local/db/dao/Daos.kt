@@ -53,6 +53,12 @@ interface ProfileDao {
 
     @Query("UPDATE profiles SET isEnabled = :isEnabled WHERE id = :profileId")
     suspend fun setProfileEnabled(profileId: Long, isEnabled: Boolean)
+
+    @Query("SELECT * FROM profiles ORDER BY createdAt ASC")
+    suspend fun getAllProfiles(): List<ProfileEntity>
+
+    @Query("DELETE FROM profiles")
+    suspend fun deleteAllProfiles()
 }
 
 @Dao
@@ -98,6 +104,9 @@ interface BlockedDomainDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDomain(domain: BlockedDomainEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDomains(domains: List<BlockedDomainEntity>)
+
     @Delete
     suspend fun deleteDomain(domain: BlockedDomainEntity)
 }
@@ -107,11 +116,17 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE profileId = :profileId")
     fun observeSchedulesForProfile(profileId: Long): Flow<List<ScheduleEntity>>
 
+    @Query("SELECT * FROM schedules WHERE profileId = :profileId")
+    suspend fun getSchedulesForProfile(profileId: Long): List<ScheduleEntity>
+
     @Query("SELECT * FROM schedules WHERE isEnabled = 1")
     suspend fun getAllActiveSchedules(): List<ScheduleEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSchedule(schedule: ScheduleEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSchedules(schedules: List<ScheduleEntity>)
 
     @Update
     suspend fun updateSchedule(schedule: ScheduleEntity)

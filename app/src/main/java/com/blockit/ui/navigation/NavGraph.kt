@@ -11,6 +11,10 @@ import androidx.navigation.navArgument
 import com.blockit.core.di.AppContainer
 import com.blockit.ui.screens.apps.AppsPickerScreen
 import com.blockit.ui.screens.apps.AppsPickerViewModel
+import com.blockit.ui.screens.backup.BackupRestoreScreen
+import com.blockit.ui.screens.backup.BackupViewModel
+import com.blockit.ui.screens.guide.HowItWorksScreen
+import com.blockit.ui.screens.guide.SetupGuideScreen
 import com.blockit.ui.screens.insights.InsightsScreen
 import com.blockit.ui.screens.insights.InsightsViewModel
 import com.blockit.ui.screens.profiles.ProfileDetailScreen
@@ -18,6 +22,7 @@ import com.blockit.ui.screens.profiles.ProfileDetailViewModel
 import com.blockit.ui.screens.profiles.ProfilesScreen
 import com.blockit.ui.screens.profiles.ProfilesViewModel
 import com.blockit.ui.screens.schedules.ScheduleEditorScreen
+import com.blockit.ui.screens.settings.SettingsHubScreen
 import com.blockit.ui.screens.strictmode.StrictModeScreen
 
 object NavRoutes {
@@ -25,7 +30,11 @@ object NavRoutes {
     const val PROFILE_DETAIL = "profile/{profileId}"
     const val ADD_APPS = "profile/{profileId}/add_apps"
     const val SCHEDULES = "profile/{profileId}/schedules"
+    const val SETTINGS_HUB = "settings"
     const val STRICT_MODE = "settings/strict_mode"
+    const val SETUP_GUIDE = "settings/setup_guide"
+    const val BACKUP_RESTORE = "settings/backup_restore"
+    const val HOW_IT_WORKS = "settings/how_it_works"
     const val INSIGHTS = "insights"
 
     fun profileDetail(profileId: Long) = "profile/$profileId"
@@ -59,7 +68,7 @@ fun BlockItNavHost(
                     navController.navigate(NavRoutes.profileDetail(profileId))
                 },
                 onOpenSettingsClick = {
-                    navController.navigate(NavRoutes.STRICT_MODE)
+                    navController.navigate(NavRoutes.SETTINGS_HUB)
                 },
                 onOpenInsightsClick = {
                     navController.navigate(NavRoutes.INSIGHTS)
@@ -124,9 +133,43 @@ fun BlockItNavHost(
             )
         }
 
+        composable(NavRoutes.SETTINGS_HUB) {
+            SettingsHubScreen(
+                onNavigateToStrictMode = { navController.navigate(NavRoutes.STRICT_MODE) },
+                onNavigateToSetupGuide = { navController.navigate(NavRoutes.SETUP_GUIDE) },
+                onNavigateToBackupRestore = { navController.navigate(NavRoutes.BACKUP_RESTORE) },
+                onNavigateToHowItWorks = { navController.navigate(NavRoutes.HOW_IT_WORKS) },
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
         composable(NavRoutes.STRICT_MODE) {
             StrictModeScreen(
                 preferenceManager = container.preferenceManager,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.SETUP_GUIDE) {
+            SetupGuideScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.BACKUP_RESTORE) {
+            val viewModel: BackupViewModel = viewModel(
+                factory = BackupViewModel.Factory(
+                    container.backupRepository
+                )
+            )
+            BackupRestoreScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.HOW_IT_WORKS) {
+            HowItWorksScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }

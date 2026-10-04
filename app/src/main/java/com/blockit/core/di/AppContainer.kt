@@ -68,6 +68,15 @@ class AppContainer(private val context: Context) {
         )
     }
 
+    val backupRepository: com.blockit.data.repository.BackupRepository by lazy {
+        com.blockit.data.repository.BackupRepository(
+            database = database,
+            preferenceManager = preferenceManager,
+            ruleEvaluator = ruleEvaluator,
+            scheduleManager = scheduleManager
+        )
+    }
+
     init {
         // Prime the rule evaluator cache and arm boundaries on startup
         applicationScope.launch {
