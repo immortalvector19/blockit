@@ -54,7 +54,26 @@ class ProfileRepository(
         )
     }
 
-    suspend fun createProfile(name: String, colorHex: Long, iconKey: String, blockMode: com.blockit.domain.model.BlockMode = com.blockit.domain.model.BlockMode.BLACKLIST): Long {
+    suspend fun getAllProfiles(): List<Profile> {
+        return profileDao.getEnabledProfiles().map { entity ->
+            Profile(
+                id = entity.id,
+                name = entity.name,
+                colorHex = entity.colorHex,
+                iconKey = entity.iconKey,
+                isEnabled = entity.isEnabled,
+                blockMode = if (entity.blockMode == "WHITELIST") com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
+                createdAt = entity.createdAt
+            )
+        }
+    }
+
+    suspend fun createProfile(
+        name: String,
+        colorHex: Long = 0xFFFF5520,
+        iconKey: String = "focus",
+        blockMode: com.blockit.domain.model.BlockMode = com.blockit.domain.model.BlockMode.BLACKLIST
+    ): Long {
         val entity = ProfileEntity(
             name = name.trim(),
             colorHex = colorHex,

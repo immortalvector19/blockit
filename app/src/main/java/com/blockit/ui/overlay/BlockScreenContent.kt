@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,7 +68,7 @@ fun BlockScreenContent(
     BlockItTheme(darkTheme = true) {
         Surface(
             modifier = modifier.fillMaxSize(),
-            color = Color(0xFF0F172A) // Calming deep slate
+            color = Color(0xFF23211F) // Authentic BlockIt dark charcoal machine body
         ) {
             Column(
                 modifier = Modifier
@@ -81,13 +82,13 @@ fun BlockScreenContent(
                     modifier = Modifier
                         .size(88.dp)
                         .clip(CircleShape)
-                        .background(if (isWhitelistBlock) Color(0xFF064E3B) else Color(0xFF1E293B)),
+                        .background(if (isWhitelistBlock) Color(0xFF1E3A2F) else Color(0xFF383532)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isWhitelistBlock) Icons.Default.Lock else Icons.Default.SelfImprovement,
                         contentDescription = if (isWhitelistBlock) "Whitelist Locked" else "Focus",
-                        tint = if (isWhitelistBlock) Color(0xFF34D399) else Color(0xFF818CF8),
+                        tint = if (isWhitelistBlock) Color(0xFF22C55E) else Color(0xFFFF5520),
                         modifier = Modifier.size(48.dp)
                     )
                 }
@@ -97,10 +98,11 @@ fun BlockScreenContent(
                 Text(
                     text = if (isWhitelistBlock) "Whitelist Mode Active" else "Pause & Reset",
                     style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
                     ),
-                    color = Color(0xFFF1F5F9)
+                    color = Color(0xFFF4F3EF)
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -108,7 +110,7 @@ fun BlockScreenContent(
                 Text(
                     text = if (isWhitelistBlock) "Only permitted apps can be used right now" else "Blocked by '$profileName'",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF94A3B8),
+                    color = Color(0xFFA8A49C),
                     textAlign = TextAlign.Center
                 )
 
@@ -118,7 +120,7 @@ fun BlockScreenContent(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF33302D))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -244,7 +246,7 @@ fun BlockScreenContent(
                         .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isWhitelistBlock) Color(0xFF059669) else Color(0xFF4F46E5),
+                        containerColor = if (isWhitelistBlock) Color(0xFF16A34A) else com.blockit.ui.theme.BlockitOrange,
                         contentColor = Color.White
                     )
                 ) {

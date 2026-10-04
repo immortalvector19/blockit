@@ -95,8 +95,12 @@ class RuleEvaluator(
                     activeProfileIds.add(profile.id)
                 }
             } else {
-                // If profile has no schedules defined, its isEnabled switch acts as always-on
-                activeProfileIds.add(profile.id)
+                // If profile has no schedules defined:
+                // Whitelist profiles require an active focus session or schedule to lock the phone.
+                // Blacklist profiles block their packed apps whenever isEnabled is true.
+                if (profile.blockMode != "WHITELIST") {
+                    activeProfileIds.add(profile.id)
+                }
             }
         }
 

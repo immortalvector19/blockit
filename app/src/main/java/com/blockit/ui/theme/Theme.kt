@@ -10,16 +10,17 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AccentIndigo,
-    onPrimary = DarkBackground,
-    primaryContainer = AccentIndigoDark,
-    secondary = AccentTeal,
+    primary = BlockitOrange,
+    onPrimary = Color.White,
+    primaryContainer = BlockitOrangeDark,
+    secondary = CreamSurface,
     background = DarkBackground,
     surface = DarkSurface,
     surfaceVariant = DarkSurfaceVariant,
@@ -29,10 +30,10 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = AccentIndigoDark,
-    onPrimary = LightSurface,
-    primaryContainer = AccentIndigo,
-    secondary = AccentTeal,
+    primary = BlockitOrange,
+    onPrimary = Color.White,
+    primaryContainer = BlockitOrangeLight,
+    secondary = CharcoalDark,
     background = LightBackground,
     surface = LightSurface,
     surfaceVariant = LightSurfaceVariant,
@@ -43,8 +44,8 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun BlockItTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean = false,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

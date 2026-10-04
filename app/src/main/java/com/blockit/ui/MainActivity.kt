@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,11 +18,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.decorView.setBackgroundColor(Color.parseColor("#0B1320"))
+        window.decorView.setBackgroundColor(Color.parseColor("#ECEBE6"))
         val container = BlockItApplication.from(this)
 
         setContent {
-            BlockItTheme {
+            BlockItTheme(darkTheme = false) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -29,7 +30,8 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     BlockItNavHost(
                         navController = navController,
-                        container = container
+                        container = container,
+                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
                     )
                 }
             }

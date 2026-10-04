@@ -22,6 +22,8 @@ import com.blockit.ui.screens.apps.AppsPickerScreen
 import com.blockit.ui.screens.apps.AppsPickerViewModel
 import com.blockit.ui.screens.backup.BackupRestoreScreen
 import com.blockit.ui.screens.backup.BackupViewModel
+import com.blockit.ui.screens.dashboard.MainDashboardScreen
+import com.blockit.ui.screens.dashboard.MainDashboardViewModel
 import com.blockit.ui.screens.guide.HowItWorksScreen
 import com.blockit.ui.screens.guide.SetupGuideScreen
 import com.blockit.ui.screens.insights.InsightsScreen
@@ -75,11 +77,11 @@ fun BlockItNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        enterTransition = { fadeIn(animationSpec = tween(250)) },
-        exitTransition = { fadeOut(animationSpec = tween(250)) },
-        popEnterTransition = { fadeIn(animationSpec = tween(250)) },
-        popExitTransition = { fadeOut(animationSpec = tween(250)) },
-        modifier = modifier
+        enterTransition = { fadeIn(animationSpec = tween(200)) },
+        exitTransition = { fadeOut(animationSpec = tween(200)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(200)) },
+        popExitTransition = { fadeOut(animationSpec = tween(200)) },
+        modifier = modifier.fillMaxSize().background(com.blockit.ui.theme.CreamBackground)
     ) {
         composable(NavRoutes.ONBOARDING) {
             OnboardingScreen(
@@ -92,24 +94,23 @@ fun BlockItNavHost(
             )
         }
         composable(NavRoutes.PROFILES) {
-            val viewModel: ProfilesViewModel = viewModel(
-                factory = ProfilesViewModel.Factory(
+            val viewModel: MainDashboardViewModel = viewModel(
+                factory = MainDashboardViewModel.Factory(
                     container.profileRepository,
                     container.ruleEvaluator,
                     container.focusSessionManager,
+                    container.scheduleManager,
+                    container.usageInsightsRepository,
                     container.preferenceManager
                 )
             )
-            ProfilesScreen(
+            MainDashboardScreen(
                 viewModel = viewModel,
-                onProfileClick = { profileId ->
-                    navController.navigate(NavRoutes.profileDetail(profileId))
+                onAddAppsClick = { profileId ->
+                    navController.navigate(NavRoutes.addApps(profileId))
                 },
                 onOpenSettingsClick = {
                     navController.navigate(NavRoutes.SETTINGS_HUB)
-                },
-                onOpenInsightsClick = {
-                    navController.navigate(NavRoutes.INSIGHTS)
                 }
             )
         }
