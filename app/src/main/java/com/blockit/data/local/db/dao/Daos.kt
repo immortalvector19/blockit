@@ -21,6 +21,7 @@ data class ProfileWithCounts(
     val colorHex: Long,
     val iconKey: String,
     val isEnabled: Boolean,
+    val blockMode: String = "BLACKLIST",
     val createdAt: Long,
     val appCount: Int,
     val domainCount: Int
@@ -53,6 +54,9 @@ interface ProfileDao {
 
     @Query("UPDATE profiles SET isEnabled = :isEnabled WHERE id = :profileId")
     suspend fun setProfileEnabled(profileId: Long, isEnabled: Boolean)
+
+    @Query("UPDATE profiles SET blockMode = :blockMode WHERE id = :profileId")
+    suspend fun setProfileMode(profileId: Long, blockMode: String)
 
     @Query("SELECT * FROM profiles ORDER BY createdAt ASC")
     suspend fun getAllProfiles(): List<ProfileEntity>

@@ -49,7 +49,7 @@ fun AppsPickerScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Select Apps to Block") },
+                title = { Text("Select Apps") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(

@@ -50,9 +50,9 @@ class ProfilesViewModel(
         }
     }
 
-    fun createProfile(name: String, colorHex: Long = 0xFF6366F1, iconKey: String = "focus") {
+    fun createProfile(name: String, colorHex: Long = 0xFF6366F1, iconKey: String = "focus", blockMode: com.blockit.domain.model.BlockMode = com.blockit.domain.model.BlockMode.BLACKLIST) {
         viewModelScope.launch {
-            profileRepository.createProfile(name, colorHex, iconKey)
+            profileRepository.createProfile(name, colorHex, iconKey, blockMode)
             ruleEvaluator.refreshRules()
         }
     }

@@ -63,7 +63,10 @@ class OverlayController(private val context: Context) {
         targetIdentifier: String,
         profileName: String,
         reason: String,
-        onHomeClicked: () -> Unit
+        isWhitelistBlock: Boolean = false,
+        allowedApps: List<String> = emptyList(),
+        onHomeClicked: () -> Unit,
+        onOpenAllowedApp: ((String) -> Unit)? = null
     ) {
         mainHandler.post {
             if (isShowing) return@post
@@ -83,9 +86,15 @@ class OverlayController(private val context: Context) {
                                 targetIdentifier = targetIdentifier,
                                 profileName = profileName,
                                 reason = reason,
+                                isWhitelistBlock = isWhitelistBlock,
+                                allowedApps = allowedApps,
                                 onHomeClicked = {
                                     hideBlockOverlay()
                                     onHomeClicked()
+                                },
+                                onOpenAllowedApp = { pkg ->
+                                    hideBlockOverlay()
+                                    onOpenAllowedApp?.invoke(pkg)
                                 }
                             )
                         }

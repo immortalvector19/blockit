@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
         FocusSessionEntity::class,
         BlockEventEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class BlockItDatabase : RoomDatabase() {
@@ -44,22 +44,30 @@ abstract class BlockItDatabase : RoomDatabase() {
     companion object {
         private const val DATABASE_NAME = "blockit.db"
 
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE profiles ADD COLUMN blockMode TEXT NOT NULL DEFAULT 'BLACKLIST'")
+            }
+        }
+
         fun create(context: Context, coroutineScope: CoroutineScope): BlockItDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 BlockItDatabase::class.java,
                 DATABASE_NAME
-            ).addCallback(object : Callback() {
+            ).addMigrations(MIGRATION_1_2)
+            .fallbackToDestructiveMigration()
+            .addCallback(object : Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
                     // Prepopulate with default profiles: Focus, Sleep, Study
                     coroutineScope.launch(Dispatchers.IO) {
                         val now = System.currentTimeMillis()
                         db.execSQL(
-                            "INSERT INTO profiles (id, name, colorHex, iconKey, isEnabled, createdAt) VALUES " +
-                                    "(1, 'Focus', 4284612846, 'focus', 1, $now)," +
-                                    "(2, 'Sleep', 4281358249, 'bed', 0, ${now + 1})," +
-                                    "(3, 'Study', 4282562473, 'book', 0, ${now + 2})"
+                            "INSERT INTO profiles (id, name, colorHex, iconKey, isEnabled, blockMode, createdAt) VALUES " +
+                                    "(1, 'Focus', 4284612846, 'focus', 1, 'BLACKLIST', $now)," +
+                                    "(2, 'Sleep', 4281358249, 'bed', 0, 'BLACKLIST', ${now + 1})," +
+                                    "(3, 'Study', 4282562473, 'book', 0, 'BLACKLIST', ${now + 2})"
                         )
                         // Prepopulate default distracting website patterns in Focus profile
                         db.execSQL("INSERT INTO blocked_domains (profileId, pattern, isWildcard) VALUES (1, 'instagram.com', 0)")

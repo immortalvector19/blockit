@@ -54,6 +54,11 @@ import com.blockit.domain.model.BlockedApp
 import com.blockit.domain.model.BlockedDomain
 
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import com.blockit.domain.model.BlockMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,6 +72,7 @@ fun ProfileDetailScreen(
     val profile by viewModel.profile.collectAsState()
     val blockedApps by viewModel.blockedApps.collectAsState()
     val blockedDomains by viewModel.blockedDomains.collectAsState()
+    val currentMode = profile?.blockMode ?: BlockMode.BLACKLIST
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAddDomainDialog by remember { mutableStateOf(false) }
 
@@ -102,6 +108,70 @@ fun ProfileDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Mode Selector Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Blocking Mode",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (currentMode == BlockMode.BLACKLIST) "🛡️ Blacklist Mode" else "🔒 Whitelist Kiosk Mode",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = if (currentMode == BlockMode.BLACKLIST) Color(0xFF38BDF8) else Color(0xFF818CF8)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (currentMode == BlockMode.BLACKLIST)
+                            "Phone operates normally, except apps and websites added below will be blocked."
+                        else
+                            "Phone is locked down into a distraction-free kiosk. ONLY apps added below are allowed to run.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.setBlockMode(BlockMode.BLACKLIST) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (currentMode == BlockMode.BLACKLIST) Color(0xFF0369A1).copy(alpha = 0.35f) else Color.Transparent
+                            )
+                        ) {
+                            Text(
+                                "Blacklist",
+                                color = if (currentMode == BlockMode.BLACKLIST) Color(0xFF38BDF8) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.setBlockMode(BlockMode.WHITELIST) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (currentMode == BlockMode.WHITELIST) Color(0xFF4338CA).copy(alpha = 0.35f) else Color.Transparent
+                            )
+                        ) {
+                            Text(
+                                "Whitelist",
+                                color = if (currentMode == BlockMode.WHITELIST) Color(0xFF818CF8) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
             SecondaryTabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = MaterialTheme.colorScheme.background
@@ -109,7 +179,9 @@ fun ProfileDetailScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Apps (${blockedApps.size})") },
+                    text = {
+                        Text(if (currentMode == BlockMode.WHITELIST) "Allowed Apps (${blockedApps.size})" else "Blocked Apps (${blockedApps.size})")
+                    },
                     icon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null) }
                 )
                 Tab(
@@ -123,6 +195,7 @@ fun ProfileDetailScreen(
             when (selectedTab) {
                 0 -> AppsTabContent(
                     apps = blockedApps,
+                    isWhitelist = currentMode == BlockMode.WHITELIST,
                     onAddApps = { profile?.let { onAddAppsClick(it.id) } },
                     onRemoveApp = { viewModel.removeApp(it.packageName) }
                 )
@@ -149,6 +222,7 @@ fun ProfileDetailScreen(
 @Composable
 private fun AppsTabContent(
     apps: List<BlockedApp>,
+    isWhitelist: Boolean,
     onAddApps: () -> Unit,
     onRemoveApp: (BlockedApp) -> Unit
 ) {
@@ -163,7 +237,7 @@ private fun AppsTabContent(
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Add Apps from Installed List")
+            Text(if (isWhitelist) "Add Permitted Apps from Installed List" else "Add Apps to Block from Installed List")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -176,7 +250,10 @@ private fun AppsTabContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "No apps blocked in this profile.",
+                    text = if (isWhitelist)
+                        "No apps whitelisted yet.\nIn Whitelist mode, without permitted apps, only system launcher/dialer can run."
+                    else
+                        "No apps blocked in this profile.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )

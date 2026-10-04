@@ -48,6 +48,14 @@ class ProfileDetailViewModel(
         }
     }
 
+    fun setBlockMode(mode: com.blockit.domain.model.BlockMode) {
+        viewModelScope.launch {
+            repository.setProfileMode(profileId, mode)
+            loadProfile()
+            evaluator.refreshRules()
+        }
+    }
+
     fun removeApp(packageName: String) {
         viewModelScope.launch {
             repository.removeAppFromProfile(profileId, packageName)

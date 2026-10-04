@@ -16,12 +16,17 @@ data class EvaluationResult(
     val isBlocked: Boolean,
     val matchedTarget: String? = null,
     val profileName: String? = null,
-    val reason: String? = null
+    val reason: String? = null,
+    val isWhitelistBlock: Boolean = false,
+    val allowedApps: List<String> = emptyList()
 )
 
 data class ActiveRuleSnapshot(
     val blockedPackages: Map<String, String> = emptyMap(), // packageName -> profileName
-    val blockedDomains: Map<String, String> = emptyMap()     // pattern -> profileName
+    val blockedDomains: Map<String, String> = emptyMap(),  // pattern -> profileName
+    val hasActiveWhitelist: Boolean = false,
+    val whitelistProfileName: String? = null,
+    val whitelistPackages: Set<String> = emptySet()
 )
 
 /**
@@ -29,8 +34,8 @@ data class ActiveRuleSnapshot(
  * Maintains an in-memory snapshot of active rules for zero-latency lookups on the UI and VPN threads.
  */
 class RuleEvaluator(
-    private val database: BlockItDatabase,
-    private val scope: CoroutineScope
+    private val database: BlockItDatabase? = null,
+    private val scope: CoroutineScope? = null
 ) {
 
     @Volatile
@@ -41,26 +46,27 @@ class RuleEvaluator(
      * Called whenever profiles, apps, domains, schedules, or focus sessions change.
      */
     suspend fun refreshRules() = withContext(Dispatchers.IO) {
+        val db = database ?: return@withContext
         val now = System.currentTimeMillis()
         val calendar = Calendar.getInstance()
 
         // 1. Fetch enabled profiles
-        val profiles = database.profileDao().getEnabledProfiles()
+        val profiles = db.profileDao().getEnabledProfiles()
         if (profiles.isEmpty()) {
             cachedSnapshot = ActiveRuleSnapshot()
             return@withContext
         }
 
         // 2. Fetch active focus sessions
-        val activeSessions = database.focusSessionDao().getActiveSessions(now)
+        val activeSessions = db.focusSessionDao().getActiveSessions(now)
         val activeSessionProfileIds = activeSessions.map { it.profileId }.toSet()
 
         // 3. Fetch schedules for all enabled profiles
-        val allSchedules = database.scheduleDao().getAllActiveSchedules()
+        val allSchedules = db.scheduleDao().getAllActiveSchedules()
         val schedulesByProfile = allSchedules.groupBy { it.profileId }
 
         val activeProfileIds = mutableSetOf<Long>()
-        val profileNameMap = profiles.associate { it.id to it.name }
+        val profileMap = profiles.associateBy { it.id }
 
         for (profile in profiles) {
             // Profile is active if it has an active focus session
@@ -94,27 +100,42 @@ class RuleEvaluator(
             }
         }
 
-        // 4. Aggregate Union of blocked apps and blocked domains for active profiles
+        // 4. Aggregate Whitelist and Blacklist rules for active profiles
         val packageMap = mutableMapOf<String, String>()
         val domainMap = mutableMapOf<String, String>()
+        val whitelistPackages = mutableSetOf<String>()
+        var activeWhitelistName: String? = null
+        var hasWhitelist = false
 
         for (profileId in activeProfileIds) {
-            val profileName = profileNameMap[profileId] ?: "Blocked"
+            val profile = profileMap[profileId] ?: continue
+            val profileName = profile.name
 
-            val apps = database.blockedAppDao().getAppsForProfile(profileId)
-            for (app in apps) {
-                packageMap[app.packageName] = profileName
-            }
+            val apps = db.blockedAppDao().getAppsForProfile(profileId)
 
-            val domains = database.blockedDomainDao().getDomainsForProfile(profileId)
-            for (domain in domains) {
-                domainMap[domain.pattern] = profileName
+            if (profile.blockMode == "WHITELIST") {
+                hasWhitelist = true
+                activeWhitelistName = profileName
+                for (app in apps) {
+                    whitelistPackages.add(app.packageName)
+                }
+            } else {
+                for (app in apps) {
+                    packageMap[app.packageName] = profileName
+                }
+                val domains = db.blockedDomainDao().getDomainsForProfile(profileId)
+                for (domain in domains) {
+                    domainMap[domain.pattern] = profileName
+                }
             }
         }
 
         cachedSnapshot = ActiveRuleSnapshot(
             blockedPackages = packageMap,
-            blockedDomains = domainMap
+            blockedDomains = domainMap,
+            hasActiveWhitelist = hasWhitelist,
+            whitelistProfileName = activeWhitelistName,
+            whitelistPackages = whitelistPackages
         )
     }
 
@@ -123,6 +144,23 @@ class RuleEvaluator(
      */
     fun isAppBlocked(packageName: String): EvaluationResult {
         val snapshot = cachedSnapshot
+
+        // Whitelist mode: if active, ONLY explicitly whitelisted apps are allowed
+        if (snapshot.hasActiveWhitelist) {
+            if (snapshot.whitelistPackages.contains(packageName)) {
+                return EvaluationResult(isBlocked = false)
+            }
+            return EvaluationResult(
+                isBlocked = true,
+                matchedTarget = packageName,
+                profileName = snapshot.whitelistProfileName ?: "Whitelist Mode",
+                reason = "Only permitted apps can be opened during Whitelist Focus Mode",
+                isWhitelistBlock = true,
+                allowedApps = snapshot.whitelistPackages.toList()
+            )
+        }
+
+        // Blacklist mode: check if package is on the blocklist
         val profileName = snapshot.blockedPackages[packageName]
         return if (profileName != null) {
             EvaluationResult(
@@ -158,4 +196,8 @@ class RuleEvaluator(
     }
 
     fun getSnapshot(): ActiveRuleSnapshot = cachedSnapshot
+
+    fun setSnapshot(snapshot: ActiveRuleSnapshot) {
+        cachedSnapshot = snapshot
+    }
 }

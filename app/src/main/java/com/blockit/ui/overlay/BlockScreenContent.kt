@@ -1,5 +1,7 @@
 package com.blockit.ui.overlay
 
+import android.content.Context
+import android.content.pm.PackageManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,11 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -48,9 +55,13 @@ fun BlockScreenContent(
     targetIdentifier: String,
     profileName: String,
     reason: String,
+    isWhitelistBlock: Boolean = false,
+    allowedApps: List<String> = emptyList(),
     onHomeClicked: () -> Unit,
+    onOpenAllowedApp: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showPrompt by remember { mutableStateOf(false) }
 
     BlockItTheme(darkTheme = true) {
@@ -61,48 +72,49 @@ fun BlockScreenContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(32.dp),
+                    .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Calming Icon
+                // Mode Icon
                 Box(
                     modifier = Modifier
                         .size(88.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E293B)),
+                        .background(if (isWhitelistBlock) Color(0xFF064E3B) else Color(0xFF1E293B)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.SelfImprovement,
-                        contentDescription = "Focus",
-                        tint = Color(0xFF818CF8),
+                        imageVector = if (isWhitelistBlock) Icons.Default.Lock else Icons.Default.SelfImprovement,
+                        contentDescription = if (isWhitelistBlock) "Whitelist Locked" else "Focus",
+                        tint = if (isWhitelistBlock) Color(0xFF34D399) else Color(0xFF818CF8),
                         modifier = Modifier.size(48.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Pause & Reset",
+                    text = if (isWhitelistBlock) "Whitelist Mode Active" else "Pause & Reset",
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
                     ),
                     color = Color(0xFFF1F5F9)
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Blocked by '$profileName'",
+                    text = if (isWhitelistBlock) "Only permitted apps can be used right now" else "Blocked by '$profileName'",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF94A3B8)
+                    color = Color(0xFF94A3B8),
+                    textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Block detail card
+                // Detail card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -118,63 +130,121 @@ fun BlockScreenContent(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Rule Triggered",
+                                text = if (isWhitelistBlock) "Access Restricted" else "Rule Triggered",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color(0xFF94A3B8)
                             )
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = targetIdentifier,
+                            text = if (isWhitelistBlock) "Attempted: $targetIdentifier" else targetIdentifier,
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color = Color(0xFFF8FAFC)
                         )
+                        if (reason.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                // If Whitelist Mode, show permitted apps launcher
+                if (isWhitelistBlock && allowedApps.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                // Optional "Why am I here?" reflective toggle
-                OutlinedButton(
-                    onClick = { showPrompt = !showPrompt },
-                    shape = RoundedCornerShape(12.dp)
-                ) {
                     Text(
-                        text = if (showPrompt) "Hide Reflection" else "Why am I here?",
-                        color = Color(0xFFCBD5E1)
+                        text = "Permitted Apps (Tap to Open):",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF34D399),
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(allowedApps) { pkg ->
+                            val appName = remember(pkg) { getAppName(context, pkg) }
+                            Card(
+                                onClick = {
+                                    if (onOpenAllowedApp != null) {
+                                        onOpenAllowedApp(pkg)
+                                    } else {
+                                        val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
+                                        launchIntent?.let { context.startActivity(it) }
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Apps, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = appName,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = Color(0xFFF8FAFC)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
-                AnimatedVisibility(visible = showPrompt) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF1E293B))
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                if (!isWhitelistBlock) {
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Optional "Why am I here?" reflective toggle
+                    OutlinedButton(
+                        onClick = { showPrompt = !showPrompt },
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Was opening this an intentional choice or an unconscious reflex?\nTake three deep breaths before deciding what to do next.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFE2E8F0),
-                            textAlign = TextAlign.Center
+                            text = if (showPrompt) "Hide Reflection" else "Why am I here?",
+                            color = Color(0xFFCBD5E1)
                         )
+                    }
+
+                    AnimatedVisibility(visible = showPrompt) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1E293B))
+                                .padding(14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Was opening this an intentional choice or an unconscious reflex?\nTake three deep breaths before deciding what to do next.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFE2E8F0),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(36.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
                 // Primary Action: Return to Home
                 Button(
                     onClick = onHomeClicked,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4F46E5),
+                        containerColor = if (isWhitelistBlock) Color(0xFF059669) else Color(0xFF4F46E5),
                         contentColor = Color.White
                     )
                 ) {
@@ -187,5 +257,15 @@ fun BlockScreenContent(
                 }
             }
         }
+    }
+}
+
+private fun getAppName(context: Context, packageName: String): String {
+    return try {
+        val pm = context.packageManager
+        val info = pm.getApplicationInfo(packageName, 0)
+        pm.getApplicationLabel(info).toString()
+    } catch (_: Exception) {
+        packageName.substringAfterLast('.')
     }
 }

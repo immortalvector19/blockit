@@ -53,19 +53,55 @@ class BlockAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         val pkgName = event.packageName?.toString() ?: return
+        val snapshot = ruleEvaluator.getSnapshot()
 
-        // Always ignore BlockIt itself and the home launcher to prevent device soft-locking
-        if (pkgName == packageName || homePackages.contains(pkgName)) {
+        // Always ignore BlockIt itself to prevent self-locking
+        if (pkgName == packageName) {
             if (overlayController.isOverlayShowing()) {
                 overlayController.hideBlockOverlay()
             }
             return
         }
 
+        // Ignore essential system UI components (system bars, keyboards)
+        if (pkgName == "com.android.systemui" ||
+            pkgName.contains("inputmethod", ignoreCase = true) ||
+            pkgName.contains("keyboard", ignoreCase = true)
+        ) {
+            return
+        }
+
+        // If user is on the Home Launcher:
+        if (homePackages.contains(pkgName)) {
+            if (snapshot.hasActiveWhitelist) {
+                // Whitelist mode: overlay the home screen and show permitted apps
+                overlayController.showBlockOverlay(
+                    targetIdentifier = "Home Screen",
+                    profileName = snapshot.whitelistProfileName ?: "Whitelist",
+                    reason = "Home screen covered during Whitelist Focus Mode",
+                    isWhitelistBlock = true,
+                    allowedApps = snapshot.whitelistPackages.toList(),
+                    onHomeClicked = {},
+                    onOpenAllowedApp = { appPkg ->
+                        val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
+                        launchIntent?.let {
+                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(it)
+                        }
+                    }
+                )
+            } else {
+                // Blacklist mode: normal phone usage on home screen
+                if (overlayController.isOverlayShowing()) {
+                    overlayController.hideBlockOverlay()
+                }
+            }
+            return
+        }
+
         // Strict Mode: Guard Android Settings against deactivating or uninstalling BlockIt
         if (pkgName == "com.android.settings") {
-            val snapshot = ruleEvaluator.getSnapshot()
-            val hasActiveBlocks = snapshot.blockedPackages.isNotEmpty() || snapshot.blockedDomains.isNotEmpty()
+            val hasActiveBlocks = snapshot.blockedPackages.isNotEmpty() || snapshot.blockedDomains.isNotEmpty() || snapshot.hasActiveWhitelist
             if (hasActiveBlocks) {
                 val root = rootInActiveWindow ?: event.source
                 if (root != null && isSettingsTamperingAttempt(root)) {
@@ -90,14 +126,28 @@ class BlockAccessibilityService : AccessibilityService() {
                 targetIdentifier = pkgName,
                 profileName = profile,
                 reason = reason,
+                isWhitelistBlock = result.isWhitelistBlock,
+                allowedApps = result.allowedApps,
                 onHomeClicked = {
                     performGlobalAction(GLOBAL_ACTION_HOME)
+                },
+                onOpenAllowedApp = { appPkg ->
+                    val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
+                    launchIntent?.let {
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(it)
+                    }
                 }
             )
 
             // Log event asynchronously
             logBlockEvent(pkgName, TargetType.APP, profile)
             return
+        } else {
+            // Foreground app is allowed: dismiss overlay if showing
+            if (overlayController.isOverlayShowing()) {
+                overlayController.hideBlockOverlay()
+            }
         }
 
         // Secondary Layer: If the foreground app is a browser, inspect current URL

@@ -45,6 +45,7 @@ fun SettingsHubScreen(
     onNavigateToSetupGuide: () -> Unit,
     onNavigateToBackupRestore: () -> Unit,
     onNavigateToHowItWorks: () -> Unit,
+    onNavigateToOnboarding: () -> Unit = {},
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -87,6 +88,13 @@ fun SettingsHubScreen(
                 subtitle = "Service status checklist and OEM background optimization bypass guides",
                 icon = Icons.Default.Build,
                 onClick = onNavigateToSetupGuide
+            )
+
+            SettingsNavigationCard(
+                title = "Interactive Onboarding Tour",
+                subtitle = "Replay the initial setup guide and verify required system permissions",
+                icon = Icons.Default.Info,
+                onClick = onNavigateToOnboarding
             )
 
             SettingsNavigationCard(

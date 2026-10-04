@@ -32,6 +32,7 @@ class ProfileRepository(
                     colorHex = item.colorHex,
                     iconKey = item.iconKey,
                     isEnabled = item.isEnabled,
+                    blockMode = if (item.blockMode == "WHITELIST") com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
                     createdAt = item.createdAt,
                     appCount = item.appCount,
                     domainCount = item.domainCount
@@ -48,16 +49,18 @@ class ProfileRepository(
             colorHex = entity.colorHex,
             iconKey = entity.iconKey,
             isEnabled = entity.isEnabled,
+            blockMode = if (entity.blockMode == "WHITELIST") com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
             createdAt = entity.createdAt
         )
     }
 
-    suspend fun createProfile(name: String, colorHex: Long, iconKey: String): Long {
+    suspend fun createProfile(name: String, colorHex: Long, iconKey: String, blockMode: com.blockit.domain.model.BlockMode = com.blockit.domain.model.BlockMode.BLACKLIST): Long {
         val entity = ProfileEntity(
             name = name.trim(),
             colorHex = colorHex,
             iconKey = iconKey,
             isEnabled = true,
+            blockMode = blockMode.name,
             createdAt = System.currentTimeMillis()
         )
         return profileDao.insertProfile(entity)
@@ -71,6 +74,7 @@ class ProfileRepository(
                 colorHex = profile.colorHex,
                 iconKey = profile.iconKey,
                 isEnabled = profile.isEnabled,
+                blockMode = profile.blockMode.name,
                 createdAt = profile.createdAt
             )
         )
@@ -83,6 +87,10 @@ class ProfileRepository(
 
     suspend fun setProfileEnabled(profileId: Long, isEnabled: Boolean) {
         profileDao.setProfileEnabled(profileId, isEnabled)
+    }
+
+    suspend fun setProfileMode(profileId: Long, blockMode: com.blockit.domain.model.BlockMode) {
+        profileDao.setProfileMode(profileId, blockMode.name)
     }
 
     fun observeAppsForProfile(profileId: Long): Flow<List<BlockedApp>> {

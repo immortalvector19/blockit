@@ -1,4 +1,9 @@
 package com.blockit.domain.model
+ 
+enum class BlockMode {
+    BLACKLIST,
+    WHITELIST
+}
 
 data class Profile(
     val id: Long = 0,
@@ -6,6 +11,7 @@ data class Profile(
     val colorHex: Long = 0xFF6200EE,
     val iconKey: String = "focus",
     val isEnabled: Boolean = true,
+    val blockMode: BlockMode = BlockMode.BLACKLIST,
     val createdAt: Long = System.currentTimeMillis(),
     val appCount: Int = 0,
     val domainCount: Int = 0

@@ -14,6 +14,7 @@ data class ProfileEntity(
     val colorHex: Long,
     val iconKey: String,
     val isEnabled: Boolean,
+    val blockMode: String = "BLACKLIST",
     val createdAt: Long
 )
 
