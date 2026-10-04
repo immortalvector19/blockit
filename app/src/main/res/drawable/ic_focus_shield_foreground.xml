@@ -1,0 +1,56 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shield Shadow / Outer Ambient Glow -->
+    <path
+        android:fillColor="#151413"
+        android:pathData="M 54,23 L 77,27 C 77,54 69,73 54,82 C 39,73 31,54 31,27 Z" />
+
+    <!-- Main Shield Armor Body (Deep Titanium Plate) -->
+    <path
+        android:fillColor="#2D2A27"
+        android:strokeColor="#524E48"
+        android:strokeWidth="1.5"
+        android:pathData="M 54,25 L 75,29 C 75,53 68,71 54,79 C 40,71 33,53 33,29 Z" />
+
+    <!-- Left Shield Facet Bevel (Depth & Material Lighting) -->
+    <path
+        android:fillColor="#383430"
+        android:pathData="M 54,25 L 54,79 C 40,71 33,53 33,29 L 54,25 Z" />
+
+    <!-- Precision Accent Trim along Shield Rim -->
+    <path
+        android:strokeColor="#FF5520"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M 38,32 L 54,28 L 70,32" />
+
+    <!-- Mechanical Concentric Iris Ring -->
+    <path
+        android:strokeColor="#FF5520"
+        android:strokeWidth="1.8"
+        android:pathData="M 54,39 A 12,12 0 1 0 54,63 A 12,12 0 1 0 54,39 Z" />
+
+    <!-- Inner Dark Aperture -->
+    <path
+        android:fillColor="#181716"
+        android:strokeColor="#6E6A62"
+        android:strokeWidth="1"
+        android:pathData="M 54,43 A 8,8 0 1 0 54,59 A 8,8 0 1 0 54,43 Z" />
+
+    <!-- Central Focus Core Jewel (Vibrant Flame) -->
+    <path
+        android:fillColor="#FF5520"
+        android:pathData="M 54,47 A 4,4 0 1 0 54,55 A 4,4 0 1 0 54,47 Z" />
+
+    <!-- Optical Alignment Crosshair Marks -->
+    <path
+        android:strokeColor="#F5F4F0"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 54,34 L 54,37 M 54,65 L 54,68 M 39,51 L 42,51 M 66,51 L 69,51" />
+
+</vector>

@@ -1,5 +1,6 @@
 package com.blockit.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -80,10 +81,30 @@ fun BlockItNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        enterTransition = { fadeIn(animationSpec = tween(200)) },
-        exitTransition = { fadeOut(animationSpec = tween(200)) },
-        popEnterTransition = { fadeIn(animationSpec = tween(200)) },
-        popExitTransition = { fadeOut(animationSpec = tween(200)) },
+        enterTransition = {
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(280)
+            ) + fadeIn(animationSpec = tween(280))
+        },
+        exitTransition = {
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(280)
+            ) + fadeOut(animationSpec = tween(180))
+        },
+        popEnterTransition = {
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(280)
+            ) + fadeIn(animationSpec = tween(280))
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(280)
+            ) + fadeOut(animationSpec = tween(180))
+        },
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     ) {
         composable(NavRoutes.ONBOARDING) {

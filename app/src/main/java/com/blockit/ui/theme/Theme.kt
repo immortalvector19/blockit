@@ -123,7 +123,10 @@ fun BlockItTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             window.statusBarColor = blockitColors.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            window.navigationBarColor = blockitColors.background.toArgb()
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

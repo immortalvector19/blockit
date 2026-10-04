@@ -150,7 +150,7 @@ fun SetupGuideScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "BlockIt runs completely on-device without internet access. Because it is sideloaded for personal use, it utilizes Android's most effective system APIs to guarantee reliable blocking.",
+                text = "FocusShield runs completely on-device without internet access. Because it is sideloaded for personal use, it utilizes Android's most effective system APIs to guarantee reliable blocking.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -221,7 +221,7 @@ fun SetupGuideScreen(
             // 5. Battery Optimization Exemption
             PermissionCard(
                 title = "Battery Optimization Exemption",
-                description = "Prevents Android Doze mode and OS battery killers from terminating BlockIt when the screen is locked.",
+                description = "Prevents Android Doze mode and OS battery killers from terminating FocusShield when the screen is locked.",
                 isGranted = isBatteryOptExempt,
                 icon = Icons.Default.BatteryChargingFull,
                 buttonText = "Disable Battery Optimization",
@@ -254,7 +254,7 @@ fun SetupGuideScreen(
             // 7. Device Admin
             PermissionCard(
                 title = "Device Admin (Optional Anti-Uninstall)",
-                description = "Prevents uninstalling BlockIt from the launcher while an active focus session is locked.",
+                description = "Prevents uninstalling FocusShield from the launcher while an active focus session is locked.",
                 isGranted = isDeviceAdminGranted,
                 icon = Icons.Default.Security,
                 buttonText = "Activate Device Admin",
@@ -264,7 +264,7 @@ fun SetupGuideScreen(
                         putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
                         putExtra(
                             DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                            "Enable Device Admin to prevent uninstalling BlockIt during active focus sessions."
+                            "Enable Device Admin to prevent uninstalling FocusShield during active focus sessions."
                         )
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
@@ -289,8 +289,8 @@ fun SetupGuideScreen(
             OemGuideCard(
                 brand = "Samsung (One UI)",
                 steps = listOf(
-                    "Settings > Apps > BlockIt > Battery -> Select 'Unrestricted'",
-                    "Settings > Battery > Background usage limits > 'Never auto sleeping apps' -> Tap '+' and add BlockIt",
+                    "Settings > Apps > FocusShield > Battery -> Select 'Unrestricted'",
+                    "Settings > Battery > Background usage limits > 'Never auto sleeping apps' -> Tap '+' and add FocusShield",
                     "Settings > Battery > More battery settings -> Turn OFF 'Put unused apps to sleep'"
                 )
             )
@@ -298,17 +298,17 @@ fun SetupGuideScreen(
             OemGuideCard(
                 brand = "Xiaomi / Redmi / POCO (HyperOS / MIUI)",
                 steps = listOf(
-                    "Long-press BlockIt icon > App Info > Enable 'Autostart'",
+                    "Long-press FocusShield icon > App Info > Enable 'Autostart'",
                     "In App Info > Battery saver -> Select 'No restrictions'",
-                    "Security app > Manage apps > Permissions > Autostart -> Enable BlockIt",
-                    "Open Recent Apps screen, pull down on the BlockIt preview, and tap the Lock icon"
+                    "Security app > Manage apps > Permissions > Autostart -> Enable FocusShield",
+                    "Open Recent Apps screen, pull down on the FocusShield preview, and tap the Lock icon"
                 )
             )
 
             OemGuideCard(
                 brand = "OnePlus / OPPO / Realme (OxygenOS / ColorOS)",
                 steps = listOf(
-                    "Settings > Apps > App management > BlockIt > Battery usage",
+                    "Settings > Apps > App management > FocusShield > Battery usage",
                     "Enable both 'Allow background activity' and 'Allow auto-launch'"
                 )
             )
@@ -316,7 +316,7 @@ fun SetupGuideScreen(
             OemGuideCard(
                 brand = "Huawei / Honor (EMUI / MagicOS)",
                 steps = listOf(
-                    "Settings > Battery > App launch > Find BlockIt",
+                    "Settings > Battery > App launch > Find FocusShield",
                     "Turn OFF 'Manage automatically' and enable: Auto-launch, Secondary launch, and Run in background"
                 )
             )
@@ -324,7 +324,7 @@ fun SetupGuideScreen(
             OemGuideCard(
                 brand = "Google Pixel & Stock Android",
                 steps = listOf(
-                    "Settings > Apps > BlockIt > App battery usage -> Select 'Unrestricted'"
+                    "Settings > Apps > FocusShield > App battery usage -> Select 'Unrestricted'"
                 )
             )
         }

@@ -151,7 +151,7 @@ fun StrictModeScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Prevents casual uninstallation of BlockIt while you have active focus rules.",
+                        "Prevents casual uninstallation of FocusShield while you have active focus rules.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
@@ -318,7 +318,7 @@ fun StrictModeScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Protect Android Settings", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Blocks attempts to force stop or disable BlockIt in device Settings during active sessions.",
+                            "Blocks attempts to force stop or disable FocusShield in device Settings during active sessions.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )

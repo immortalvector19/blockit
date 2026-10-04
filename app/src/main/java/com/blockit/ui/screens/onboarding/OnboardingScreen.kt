@@ -11,11 +11,16 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +33,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AccessibilityNew
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +56,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,8 +71,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -65,16 +88,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.blockit.data.local.datastore.PreferenceManager
-import com.blockit.ui.components.AnalogLever
-import com.blockit.ui.components.BlockNumberDisplay
-import com.blockit.ui.components.BlockitProgressSquares
-import com.blockit.ui.components.SlideToActButton
-import com.blockit.ui.theme.BlockitOrange
-import com.blockit.ui.theme.CharcoalDark
-import com.blockit.ui.theme.CreamBackground
-import com.blockit.ui.theme.CreamSurface
-import com.blockit.ui.theme.CreamText
-import com.blockit.ui.theme.CreamTextMuted
+import com.blockit.ui.theme.BlockitTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -85,6 +99,9 @@ fun OnboardingScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val colors = BlockitTheme.colors
+    val haptic = LocalHapticFeedback.current
+
     var currentStep by remember { mutableIntStateOf(0) }
     var showAccessibilityPreDialog by remember { mutableStateOf(false) }
 
@@ -117,107 +134,88 @@ fun OnboardingScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasNotification = granted
-        if (granted && currentStep == 2) currentStep = 3
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(CreamBackground)
-            .padding(horizontal = 24.dp, vertical = 20.dp)
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = colors.background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header: lowercase blockit title
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "blockit",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 32.sp,
-                        letterSpacing = (-1).sp
-                    ),
-                    color = CharcoalDark
-                )
-            }
+            // Header Progress & Brand Identity
+            OnboardingHeader(
+                currentStep = currentStep,
+                totalSteps = 4,
+                onStepClick = { target ->
+                    if (target < currentStep) currentStep = target
+                }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Step Content
+            // Step Content with smooth horizontal transition
             AnimatedContent(
                 targetState = currentStep,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "blockit_onboarding_step"
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Start,
+                            animationSpec = tween(280)
+                        ) + fadeIn(tween(280))).togetherWith(
+                            slideOutOfContainer(
+                                AnimatedContentTransitionScope.SlideDirection.Start,
+                                animationSpec = tween(280)
+                            ) + fadeOut(tween(200))
+                        )
+                    } else {
+                        (slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.End,
+                            animationSpec = tween(280)
+                        ) + fadeIn(tween(280))).togetherWith(
+                            slideOutOfContainer(
+                                AnimatedContentTransitionScope.SlideDirection.End,
+                                animationSpec = tween(280)
+                            ) + fadeOut(tween(200))
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                label = "onboarding_step_content"
             ) { step ->
                 when (step) {
-                    0 -> StepAnalog(onPullLever = { currentStep = 1 })
-                    1 -> StepBeforeBoarding(
-                        grantedCount = listOf(hasNotification, hasAccessibility, hasOverlay, hasBattery).count { it },
-                        onPullLever = { currentStep = 2 }
+                    0 -> WelcomeStep(
+                        onNext = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            currentStep = 1
+                        }
                     )
-                    2 -> StepPermissionCard(
-                        digit = 1,
-                        activeStepNumber = 1,
-                        isGranted = hasNotification,
-                        title = "NOTIFICATIONS",
-                        description = "Grant it to alert you when a session is active and how much time is left until the block ends.",
-                        bullet = "Only for the block: no sound, no vibration, no ads.",
-                        buttonText = if (hasNotification) "Granted" else "Grant",
-                        onGrant = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                hasNotification = true
-                                currentStep = 3
-                            }
-                        },
-                        onPullLever = { currentStep = 3 }
-                    )
-                    3 -> StepPermissionCard(
-                        digit = 2,
-                        activeStepNumber = 2,
-                        isGranted = hasAccessibility,
-                        title = "ACCESSIBILITY",
-                        description = "Turns the screen off if you leave to an app that isn't allowed during a session. No data is collected.",
-                        bullet = "blockit never reads what is on your screen: it only brings you back here.",
-                        buttonText = if (hasAccessibility) "Granted" else "Grant",
-                        onGrant = {
-                            showAccessibilityPreDialog = true
-                        },
-                        onPullLever = { currentStep = 4 }
-                    )
-                    4 -> StepPermissionCard(
-                        digit = 3,
-                        activeStepNumber = 3,
-                        isGranted = hasOverlay,
-                        title = "SHOW OVER APPS",
-                        description = "It lets blockit bring you back to the session, and show the time left above the apps you allowed.",
-                        bullet = "Without it the block screen may fail to come back on its own.",
-                        buttonText = if (hasOverlay) "Granted" else "Grant",
-                        onGrant = {
+                    1 -> CoreEnginesStep(
+                        hasAccessibility = hasAccessibility,
+                        hasOverlay = hasOverlay,
+                        onRequestAccessibility = { showAccessibilityPreDialog = true },
+                        onRequestOverlay = {
                             val intent = Intent(
                                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                 Uri.parse("package:${context.packageName}")
                             )
                             context.startActivity(intent)
                         },
-                        onPullLever = { currentStep = 5 }
+                        onBack = { currentStep = 0 },
+                        onNext = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            currentStep = 2
+                        }
                     )
-                    5 -> StepPermissionCard(
-                        digit = 4,
-                        activeStepNumber = 4,
-                        isGranted = hasBattery,
-                        title = "BATTERY",
-                        description = "Turns off battery optimization for blockit, so the system can't interrupt an ongoing block.",
-                        bullet = "The system may otherwise stop a block that is already running.",
-                        buttonText = if (hasBattery) "Granted" else "Grant",
-                        onGrant = {
+                    2 -> ReliabilityStep(
+                        hasBattery = hasBattery,
+                        hasNotification = hasNotification,
+                        onRequestBattery = {
                             try {
                                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                                     data = Uri.parse("package:${context.packageName}")
@@ -228,10 +226,25 @@ fun OnboardingScreen(
                                 context.startActivity(intent)
                             }
                         },
-                        onPullLever = { currentStep = 6 }
+                        onRequestNotification = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                hasNotification = true
+                            }
+                        },
+                        onBack = { currentStep = 1 },
+                        onNext = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            currentStep = 3
+                        }
                     )
-                    else -> StepMachineReady(
-                        onSlideToStart = {
+                    else -> ReadyStep(
+                        hasAccessibility = hasAccessibility,
+                        hasOverlay = hasOverlay,
+                        hasBattery = hasBattery,
+                        onComplete = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             scope.launch {
                                 preferenceManager.setOnboardingCompleted(true)
                                 onComplete()
@@ -241,45 +254,43 @@ fun OnboardingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Footer
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "100% On-Device • Zero Internet • No Telemetry",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CreamTextMuted
-                )
-            }
+            // Footer Privacy Guarantee
+            Text(
+                text = "100% On-Device • Zero Network • No Telemetry",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textMuted
+            )
         }
 
-        // Accessibility Pre-Grant Dialog (matching video frame 00:12)
+        // Accessibility Pre-Grant Explanation Dialog
         if (showAccessibilityPreDialog) {
             AlertDialog(
                 onDismissRequest = { showAccessibilityPreDialog = false },
                 icon = {
                     Icon(
-                        imageVector = Icons.Default.Build,
+                        imageVector = Icons.Default.AccessibilityNew,
                         contentDescription = null,
-                        tint = BlockitOrange,
+                        tint = colors.primary,
                         modifier = Modifier.size(36.dp)
                     )
                 },
                 title = {
                     Text(
-                        "Enable session block",
+                        "Enable App Detection",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = CharcoalDark
+                        color = colors.textPrimary
                     )
                 },
                 text = {
                     Text(
-                        "During a session, if you open an app that isn't on your whitelist, blockit uses Android's Accessibility Service to bring you back to the block screen. It doesn't read any screen content and doesn't collect or share any data.\n\nWithout this service, blockit can't block your phone. On the next screen, turn on 'blockit - Session block'.",
+                        "On the next screen, find 'FocusShield' under Downloaded/Installed Services and switch it ON.\n\n" +
+                        "Why it is needed: FocusShield uses this to detect when a blocked app is opened and redirect you back to your focus session.\n\n" +
+                        "Privacy promise: FocusShield runs entirely locally on this device. It never reads keystrokes, personal messages, or screen data.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = CreamText
+                        color = colors.textMuted,
+                        lineHeight = 22.sp
                     )
                 },
                 confirmButton = {
@@ -289,250 +300,533 @@ fun OnboardingScreen(
                             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                             context.startActivity(intent)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = CharcoalDark)
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                     ) {
-                        Text("I agree")
+                        Text("Open Settings", fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAccessibilityPreDialog = false }) {
-                        Text("Not now", color = CreamTextMuted)
+                        Text("Cancel", color = colors.textMuted)
                     }
                 },
-                containerColor = CreamBackground,
-                shape = RoundedCornerShape(18.dp)
+                containerColor = colors.surface,
+                shape = RoundedCornerShape(20.dp)
             )
         }
     }
 }
 
 @Composable
-private fun StepAnalog(onPullLever: () -> Unit) {
+private fun OnboardingHeader(
+    currentStep: Int,
+    totalSteps: Int,
+    onStepClick: (Int) -> Unit
+) {
+    val colors = BlockitTheme.colors
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Center Orange Block graphic
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(BlockitOrange)
-        )
-
-        Spacer(modifier = Modifier.height(36.dp))
-
+        // App Brand Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "▶  ANALOG",
+                    text = "FocusShield",
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        letterSpacing = (-0.5).sp
                     ),
-                    color = CharcoalDark
+                    color = colors.textPrimary
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "blockit works like a machine: wheels, levers and handles, each with its own click. The lever on the right moves you forward. Pull it down until it clicks to continue.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CreamTextMuted,
-                    lineHeight = 22.sp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.Top) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .size(6.dp)
-                            .background(BlockitOrange)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "The lever clicks when the gesture is done: you feel it in your hand.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CreamTextMuted
-                    )
-                }
             }
 
-            AnalogLever(onTrigger = onPullLever)
+            // Step Indicator Badge
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = colors.surfaceVariant,
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Text(
+                    text = "${currentStep + 1} of $totalSteps",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textMuted,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        TextButton(onClick = onPullLever) {
+        // Segmented Progress Bar (Apple-style subtle bar)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            repeat(totalSteps) { index ->
+                val isCompleted = index <= currentStep
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(if (isCompleted) colors.primary else colors.border)
+                        .clickable { onStepClick(index) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeStep(
+    onNext: () -> Unit
+) {
+    val colors = BlockitTheme.colors
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Dynamic FocusShield Iris Emblem
+            FocusShieldEmblem(
+                isArmed = false,
+                accentColor = colors.primary,
+                bodyColor = colors.surfaceVariant,
+                strokeColor = colors.border
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
             Text(
-                "PULL THE LEVER OR TAP HERE",
-                style = MaterialTheme.typography.labelMedium.copy(
+                text = "Reclaim Your Focus",
+                style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.5.sp
+                    letterSpacing = (-0.5).sp
                 ),
-                color = CreamTextMuted
+                color = colors.textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "A calm personal defense system against digital distraction. Built with strict privacy and zero cloud compromises.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textMuted,
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Core Pillars Cards
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                PillarCard(
+                    icon = Icons.Default.Security,
+                    title = "100% On-Device Protection",
+                    description = "No network calls, no analytics, no accounts. Your blocking rules never leave your phone."
+                )
+                PillarCard(
+                    icon = Icons.Default.Speed,
+                    title = "Kernel-Grade Defense",
+                    description = "Sideload-optimized architecture using Android's most reliable system APIs for unbreakable blocking."
+                )
+                PillarCard(
+                    icon = Icons.Default.Lock,
+                    title = "Custom Modes & PIN Lock",
+                    description = "Tailor blacklist or whitelist profiles, recurring schedules, and prevent impulsive cancellation."
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // CTA Button
+        Button(
+            onClick = onNext,
+            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Begin Setup",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoreEnginesStep(
+    hasAccessibility: Boolean,
+    hasOverlay: Boolean,
+    onRequestAccessibility: () -> Unit,
+    onRequestOverlay: () -> Unit,
+    onBack: () -> Unit,
+    onNext: () -> Unit
+) {
+    val colors = BlockitTheme.colors
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "Core Defense Engines",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "FocusShield needs these two capabilities to detect distracting apps and render full-screen shield overlays.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textMuted,
+                lineHeight = 20.sp
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Permission Card 1: Accessibility
+            PermissionSetupCard(
+                icon = Icons.Default.AccessibilityNew,
+                title = "App Detection Engine",
+                subtitle = "Accessibility Service",
+                isGranted = hasAccessibility,
+                description = "Detects when blocked apps are launched and instantly redirects you to your focus shield. Never reads screen content, keystrokes, or messages.",
+                actionText = "Enable in Settings",
+                onAction = onRequestAccessibility
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Permission Card 2: Overlay
+            PermissionSetupCard(
+                icon = Icons.Default.Layers,
+                title = "Full-Screen Shield Overlay",
+                subtitle = "Display Over Other Apps",
+                isGranted = hasOverlay,
+                description = "Allows FocusShield to immediately show the calm full-screen blocking card over restricted apps without delay.",
+                actionText = "Grant Overlay",
+                onAction = onRequestOverlay
             )
         }
-    }
-}
 
-@Composable
-private fun StepBeforeBoarding(
-    grantedCount: Int,
-    onPullLever: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Geometric arrangement of blocks matching video frame 00:04
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(modifier = Modifier.size(64.dp).clip(RoundedCornerShape(6.dp)).background(BlockitOrange))
-            Box(modifier = Modifier.size(64.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFFFCCBC)))
-            Box(modifier = Modifier.size(64.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFD6D4CC)))
-        }
+        Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(36.dp))
-
+        // Navigation Controls
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                Text(
-                    text = "🔒  BEFORE BOARDING",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = CharcoalDark
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "To really lock your phone, blockit needs 4 system permissions. I will ask for them one at a time: on some phones they are well hidden, and without them the block does not hold.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CreamTextMuted,
-                    lineHeight = 22.sp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.Top) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .size(6.dp)
-                            .background(BlockitOrange)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (grantedCount > 0) "$grantedCount of 4 permissions already granted." else "Nothing is granted yet: they light up one by one as you go.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CreamTextMuted
-                    )
-                }
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Text("Back", color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
             }
 
-            AnalogLever(onTrigger = onPullLever)
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        Button(
-            onClick = onPullLever,
-            colors = ButtonDefaults.buttonColors(containerColor = CharcoalDark),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text("Begin Setup", fontWeight = FontWeight.Bold)
+            Button(
+                onClick = onNext,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (hasAccessibility && hasOverlay) colors.primary else colors.surfaceVariant
+                ),
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(
+                    text = if (hasAccessibility && hasOverlay) "Continue →" else "Next Step",
+                    color = if (hasAccessibility && hasOverlay) Color.White else colors.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun StepPermissionCard(
-    digit: Int,
-    activeStepNumber: Int,
-    isGranted: Boolean,
-    title: String,
-    description: String,
-    bullet: String,
-    buttonText: String,
-    onGrant: () -> Unit,
-    onPullLever: () -> Unit
+private fun ReliabilityStep(
+    hasBattery: Boolean,
+    hasNotification: Boolean,
+    onRequestBattery: () -> Unit,
+    onRequestNotification: () -> Unit,
+    onBack: () -> Unit,
+    onNext: () -> Unit
 ) {
+    val colors = BlockitTheme.colors
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Big Block Number: 01, 02, 03, 04
-        BlockNumberDisplay(number = digit, color = CharcoalDark)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Background Reliability",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary
+            )
 
-        // Progress squares matching video: [■] [□] [□] [□]
-        BlockitProgressSquares(currentStep = activeStepNumber, totalSteps = 4)
+            Spacer(modifier = Modifier.height(6.dp))
 
-        Spacer(modifier = Modifier.height(28.dp))
+            Text(
+                text = "Prevent aggressive system battery savers from stopping your active focus sessions.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textMuted,
+                lineHeight = 20.sp
+            )
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Permission Card 3: Battery Optimization
+            PermissionSetupCard(
+                icon = Icons.Default.BatteryChargingFull,
+                title = "Ignore Battery Optimizations",
+                subtitle = "Survive OEM Memory Killers",
+                isGranted = hasBattery,
+                description = "Exempts FocusShield from aggressive background sleep routines on Samsung, Xiaomi, and Pixel devices so active blocks never fail.",
+                actionText = "Exempt App",
+                onAction = onRequestBattery
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Permission Card 4: Notifications
+            PermissionSetupCard(
+                icon = Icons.Default.Notifications,
+                title = "Active Session Alerts",
+                subtitle = "Countdown Notifications",
+                isGranted = hasNotification,
+                description = "Shows quiet, persistent countdown notifications during active focus blocks so you know when sessions end.",
+                actionText = "Allow Notifications",
+                onAction = onRequestNotification
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Navigation Controls
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Text("Back", color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
+            }
+
+            Button(
+                onClick = onNext,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = CharcoalDark
+                    text = "Continue →",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CreamTextMuted,
-                    lineHeight = 22.sp
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.Top) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .size(6.dp)
-                            .background(BlockitOrange)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadyStep(
+    hasAccessibility: Boolean,
+    hasOverlay: Boolean,
+    hasBattery: Boolean,
+    onComplete: () -> Unit
+) {
+    val colors = BlockitTheme.colors
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Armed FocusShield Emblem
+            FocusShieldEmblem(
+                isArmed = true,
+                accentColor = Color(0xFF22C55E),
+                bodyColor = colors.surfaceVariant,
+                strokeColor = colors.border
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Text(
+                text = "FocusShield is Armed",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-0.5).sp
+                ),
+                color = colors.textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Your phone is now equipped with tactical distraction defense. All rules run 100% locally on this device.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textMuted,
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Engine Status Checklist
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatusCheckRow(
+                        title = "App Detection Engine",
+                        isActive = hasAccessibility
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = bullet,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CreamTextMuted
+                    StatusCheckRow(
+                        title = "Full-Screen Shield Overlay",
+                        isActive = hasOverlay
+                    )
+                    StatusCheckRow(
+                        title = "Background Memory Guardian",
+                        isActive = hasBattery
                     )
                 }
             }
 
-            AnalogLever(onTrigger = onPullLever)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Pro-tip Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Tip: You can set a 4-digit security PIN lock in Settings > Strict Mode to prevent yourself from canceling active focus blocks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
+        // Final Launch Button
         Button(
-            onClick = onGrant,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isGranted) Color(0xFF22C55E) else CharcoalDark
-            ),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp)
+            onClick = onComplete,
+            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(16.dp)
         ) {
             Text(
-                text = if (isGranted) "Granted ✓" else buttonText,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                text = "Enter FocusShield",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
         }
@@ -540,51 +834,287 @@ private fun StepPermissionCard(
 }
 
 @Composable
-private fun StepMachineReady(
-    onSlideToStart: () -> Unit
+private fun PillarCard(
+    icon: ImageVector,
+    title: String,
+    description: String
 ) {
-    Column(
+    val colors = BlockitTheme.colors
+
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, colors.border)
     ) {
-        // All 4 squares illuminated
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            repeat(4) {
-                Box(modifier = Modifier.size(54.dp).clip(RoundedCornerShape(6.dp)).background(BlockitOrange))
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textMuted,
+                    lineHeight = 18.sp
+                )
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(36.dp))
+@Composable
+private fun PermissionSetupCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    isGranted: Boolean,
+    description: String,
+    actionText: String,
+    onAction: () -> Unit
+) {
+    val colors = BlockitTheme.colors
 
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isGranted) colors.surface else colors.surfaceVariant.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            1.dp,
+            if (isGranted) Color(0xFF22C55E).copy(alpha = 0.4f) else colors.border
+        )
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            // Header Row: Icon + Title + Status Pill
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isGranted) Color(0xFF22C55E).copy(alpha = 0.15f)
+                                else colors.primary.copy(alpha = 0.12f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isGranted) Color(0xFF22C55E) else colors.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textMuted
+                        )
+                    }
+                }
+
+                // Status Badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isGranted) Color(0xFF166534).copy(alpha = 0.15f) else Color(0xFF9A3412).copy(alpha = 0.15f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isGranted) Color(0xFF22C55E).copy(alpha = 0.3f) else Color(0xFFEA580C).copy(alpha = 0.3f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (isGranted) Color(0xFF22C55E) else Color(0xFFEA580C))
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (isGranted) "Granted ✓" else "Action Req.",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isGranted) Color(0xFF22C55E) else Color(0xFFEA580C)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textMuted,
+                lineHeight = 19.sp
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Action Button
+            Button(
+                onClick = onAction,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isGranted) Color(0xFF22C55E) else colors.textPrimary
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = if (isGranted) "Active ✓" else actionText,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusCheckRow(
+    title: String,
+    isActive: Boolean
+) {
+    val colors = BlockitTheme.colors
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
-            text = "THE MACHINE IS READY",
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Black,
-                fontSize = 24.sp,
-                letterSpacing = 1.sp
-            ),
-            color = CharcoalDark,
-            textAlign = TextAlign.Center
+            text = title,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = colors.textPrimary
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = if (isActive) Color(0xFF22C55E) else colors.textMuted.copy(alpha = 0.4f),
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (isActive) "Ready" else "Optional",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = if (isActive) Color(0xFF22C55E) else colors.textMuted
+            )
+        }
+    }
+}
 
-        Text(
-            text = "Your phone is now equipped with tactile focus controls. All rules run 100% locally on this device with zero accounts, zero analytics, and zero telemetry.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = CreamTextMuted,
-            textAlign = TextAlign.Center,
-            lineHeight = 24.sp
-        )
+/**
+ * High-craft FocusShield Emblem with concentric aperture rings and glowing focus core.
+ */
+@Composable
+private fun FocusShieldEmblem(
+    isArmed: Boolean,
+    accentColor: Color,
+    bodyColor: Color,
+    strokeColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.size(120.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val outerRadius = size.width / 2f - 4f
+            val midRadius = outerRadius * 0.72f
+            val innerRadius = outerRadius * 0.42f
 
-        Spacer(modifier = Modifier.height(40.dp))
+            // Outer Concentric Track
+            drawCircle(
+                color = strokeColor,
+                radius = outerRadius,
+                center = center,
+                style = Stroke(width = 1.5.dp.toPx())
+            )
 
-        // Slide to start button matching video frame 00:14
-        SlideToActButton(
-            text = "Slide to Start",
-            isActive = false,
-            onTrigger = onSlideToStart
+            // Mid Track
+            drawCircle(
+                color = if (isArmed) accentColor.copy(alpha = 0.3f) else strokeColor,
+                radius = midRadius,
+                center = center,
+                style = Stroke(width = 1.2.dp.toPx())
+            )
+
+            // Inner Armor Plate Fill
+            drawCircle(
+                color = bodyColor,
+                radius = midRadius,
+                center = center
+            )
+
+            // Core Glow Ring
+            drawCircle(
+                color = accentColor.copy(alpha = 0.2f),
+                radius = innerRadius * 1.4f,
+                center = center
+            )
+
+            // Core Focal Jewel
+            drawCircle(
+                color = accentColor,
+                radius = innerRadius * 0.7f,
+                center = center
+            )
+        }
+
+        // Center Emblem Icon
+        Icon(
+            imageVector = if (isArmed) Icons.Default.CheckCircle else Icons.Default.Shield,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(24.dp)
         )
     }
 }

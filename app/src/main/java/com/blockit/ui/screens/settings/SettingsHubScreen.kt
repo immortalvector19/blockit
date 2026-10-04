@@ -130,7 +130,7 @@ fun SettingsHubScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "BlockIt v1.0.0 (Debug)",
+                    text = "FocusShield v1.0.0 (Personal Edition)",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

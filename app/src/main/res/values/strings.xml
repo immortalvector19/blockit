@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">BlockIt</string>
+    <string name="app_name">FocusShield</string>
     <string name="accessibility_service_description">Monitors foreground apps and browser address bars to enforce your personal focus blocking rules.</string>
-    <string name="device_admin_description">Prevents unauthorized uninstallation of BlockIt while strict focus sessions are active.</string>
+    <string name="device_admin_description">Prevents unauthorized uninstallation of FocusShield while strict focus sessions are active.</string>
 </resources>
