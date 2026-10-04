@@ -110,8 +110,8 @@ class OverlayController(private val context: Context) {
                             WindowManager.LayoutParams.TYPE_PHONE
                         },
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                                WindowManager.LayoutParams.FLAG_FULLSCREEN or
+                                WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
                         PixelFormat.TRANSLUCENT
                     ).apply {
                         gravity = Gravity.CENTER

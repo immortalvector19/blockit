@@ -123,12 +123,13 @@ class MainDashboardViewModel(
         }
     }
 
-    fun setBagMode(profileId: Long, mode: BlockMode) {
+    fun setProfileMode(profileId: Long, mode: BlockMode) {
         viewModelScope.launch {
             profileRepository.setProfileMode(profileId, mode)
             ruleEvaluator.refreshRules()
         }
     }
+    fun setBagMode(profileId: Long, mode: BlockMode) = setProfileMode(profileId, mode)
 
     fun toggleProfileEnabled(profileId: Long, isEnabled: Boolean) {
         viewModelScope.launch {
@@ -138,15 +139,16 @@ class MainDashboardViewModel(
         }
     }
 
-    fun createBag(name: String, mode: BlockMode) {
+    fun createProfile(name: String, mode: BlockMode) {
         viewModelScope.launch {
             val id = profileRepository.createProfile(name = name, blockMode = mode)
             _selectedProfileId.value = id
             ruleEvaluator.refreshRules()
         }
     }
+    fun createBag(name: String, mode: BlockMode) = createProfile(name, mode)
 
-    fun deleteBag(profileId: Long) {
+    fun deleteProfile(profileId: Long) {
         viewModelScope.launch {
             profileRepository.deleteProfile(profileId)
             val remaining = profileRepository.getAllProfiles()
@@ -154,6 +156,7 @@ class MainDashboardViewModel(
             ruleEvaluator.refreshRules()
         }
     }
+    fun deleteBag(profileId: Long) = deleteProfile(profileId)
 
     fun removeApp(profileId: Long, packageName: String) {
         viewModelScope.launch {

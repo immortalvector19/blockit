@@ -46,7 +46,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
@@ -230,9 +229,10 @@ fun MainDashboardScreen(
                             } else {
                                 viewModel.endSession(sessId)
                             }
-                        }
+                        },
+                        onNavigateToProfiles = { selectedTab = 1 }
                     )
-                    1 -> BagsTabContent(
+                    1 -> ProfilesTabContent(
                         profiles = profiles,
                         selectedProfileId = selectedProfileId,
                         packedApps = packedApps,
@@ -250,10 +250,10 @@ fun MainDashboardScreen(
                             }
                         },
                         onSelectProfile = { viewModel.selectProfile(it) },
-                        onSetBagMode = { id, mode -> viewModel.setBagMode(id, mode) },
+                        onSetProfileMode = { id, mode -> viewModel.setProfileMode(id, mode) },
                         onToggleProfile = { id, enabled ->
                             if (!enabled && strictConfig.isEnabled) {
-                                pendingDescription = "turn off this bag"
+                                pendingDescription = "turn off this profile"
                                 pendingAction = { viewModel.toggleProfileEnabled(id, false) }
                             } else {
                                 viewModel.toggleProfileEnabled(id, enabled)
@@ -263,7 +263,15 @@ fun MainDashboardScreen(
                         onRemoveApp = { id, pkg -> viewModel.removeApp(id, pkg) },
                         onAddDomain = { id, pattern, wildcard -> viewModel.addDomain(id, pattern, wildcard) },
                         onRemoveDomain = { domainId -> viewModel.removeDomain(domainId) },
-                        onCreateBag = { name, mode -> viewModel.createBag(name, mode) }
+                        onCreateProfile = { name, mode -> viewModel.createProfile(name, mode) },
+                        onDeleteProfile = { id ->
+                            if (strictConfig.isEnabled) {
+                                pendingDescription = "delete this profile"
+                                pendingAction = { viewModel.deleteProfile(id) }
+                            } else {
+                                viewModel.deleteProfile(id)
+                            }
+                        }
                     )
                     2 -> RoutinesTabContent(
                         profiles = profiles,
@@ -271,7 +279,8 @@ fun MainDashboardScreen(
                         schedules = schedules,
                         onSelectProfile = { viewModel.selectProfile(it) },
                         onSaveSchedule = { viewModel.saveSchedule(it) },
-                        onDeleteSchedule = { viewModel.deleteSchedule(it) }
+                        onDeleteSchedule = { viewModel.deleteSchedule(it) },
+                        onNavigateToProfiles = { selectedTab = 1 }
                     )
                     3 -> StatisticsTabContent(
                         insightsData = insightsData
@@ -339,17 +348,26 @@ private fun DashboardTopBar(
             }
         }
 
-        // Center Wordmark
-        Text(
-            text = "blockit",
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Black,
-                fontSize = 26.sp,
-                letterSpacing = (-1).sp
-            ),
-            color = colors.textPrimary
-        )
+        // Center Brand Identity
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.Shield,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "FocusShield",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 22.sp,
+                    letterSpacing = (-0.5).sp
+                ),
+                color = colors.textPrimary
+            )
+        }
 
         // Right Actions: Dark Mode Quick Toggle + Settings Button
         Row(
@@ -412,9 +430,9 @@ private fun DashboardBottomBar(
         ) {
             val tabs = listOf(
                 Icons.Default.Timer to "Timer",
-                Icons.Default.Luggage to "The Bags",
+                Icons.Default.Shield to "Profiles",
                 Icons.Default.Schedule to "Routines",
-                Icons.Default.BarChart to "Stats"
+                Icons.Default.BarChart to "Insights"
             )
 
             tabs.forEachIndexed { index, (icon, label) ->
@@ -457,7 +475,8 @@ private fun TimerTabContent(
     onFixPermissions: () -> Unit,
     onSelectProfile: (Long) -> Unit,
     onStartSession: (Long, Int) -> Unit,
-    onEndSession: (Long) -> Unit
+    onEndSession: (Long) -> Unit,
+    onNavigateToProfiles: () -> Unit
 ) {
     val colors = BlockitTheme.colors
     var selectedDurationMinutes by remember { mutableIntStateOf(15) }
@@ -514,7 +533,7 @@ private fun TimerTabContent(
                                 color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
                             )
                             Text(
-                                text = "Tap here to grant Accessibility & Display Over Apps so BlockIt can lock your screen.",
+                                text = "Tap here to grant Accessibility & Display Over Apps so FocusShield can block distractions.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
                             )
@@ -522,7 +541,8 @@ private fun TimerTabContent(
                     }
                 }
             }
-            // Target Bag Selector
+
+            // Target Profile Selector or Empty State
             if (profiles.isNotEmpty()) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -542,6 +562,48 @@ private fun TimerTabContent(
                                 color = if (isSelected) Color.White else colors.textPrimary,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                             )
+                        }
+                    }
+                }
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No Focus Profiles Yet",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = colors.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Create a profile (e.g. Deep Work, Study, or Sleep) to pick apps and sites to block.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textMuted,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = onNavigateToProfiles,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("+ Create Focus Profile", color = if (colors.isDark) colors.primary else Color.White)
                         }
                     }
                 }
@@ -645,15 +707,21 @@ private fun TimerTabContent(
         Spacer(modifier = Modifier.height(32.dp))
 
         // Slide to Start / Slide to Stop
-        val targetId = targetProfile?.id ?: 1L
+        val targetId = targetProfile?.id
         SlideToActButton(
-            text = if (activeSession != null) "Slide to Stop" else "Slide to Start",
+            text = when {
+                activeSession != null -> "Slide to Stop"
+                targetId == null -> "Create Profile to Start"
+                else -> "Slide to Start"
+            },
             isActive = activeSession != null,
             onTrigger = {
                 if (activeSession != null) {
                     onEndSession(activeSession.id)
-                } else {
+                } else if (targetId != null) {
                     onStartSession(targetId, selectedDurationMinutes)
+                } else {
+                    onNavigateToProfiles()
                 }
             }
         )
@@ -730,10 +798,10 @@ private fun DurationTile(
 }
 
 // -------------------------------------------------------------
-// TAB 2: THE BAGS (PROFILES & WHITELIST) (Matching video frame 00:20)
+// TAB 2: PROFILES (PROFILES & WHITELIST / BLACKLIST)
 // -------------------------------------------------------------
 @Composable
-private fun BagsTabContent(
+private fun ProfilesTabContent(
     profiles: List<Profile>,
     selectedProfileId: Long?,
     packedApps: List<BlockedApp>,
@@ -741,18 +809,20 @@ private fun BagsTabContent(
     isProtected: Boolean,
     onFixPermissions: () -> Unit,
     onSelectProfile: (Long) -> Unit,
-    onSetBagMode: (Long, BlockMode) -> Unit,
+    onSetProfileMode: (Long, BlockMode) -> Unit,
     onToggleProfile: (Long, Boolean) -> Unit,
     onAddApps: (Long) -> Unit,
     onRemoveApp: (Long, String) -> Unit,
     onAddDomain: (Long, String, Boolean) -> Unit,
     onRemoveDomain: (Long) -> Unit,
-    onCreateBag: (String, BlockMode) -> Unit
+    onCreateProfile: (String, BlockMode) -> Unit,
+    onDeleteProfile: (Long) -> Unit
 ) {
     val colors = BlockitTheme.colors
-    val currentBag = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
+    val currentProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showAddDomainDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -781,7 +851,7 @@ private fun BagsTabContent(
                             color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
                         )
                         Text(
-                            text = "Tap here to grant Accessibility & Display Over Apps so BlockIt can lock your screen.",
+                            text = "Tap here to grant Accessibility & Display Over Apps so FocusShield can block distractions.",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
                         )
@@ -789,265 +859,343 @@ private fun BagsTabContent(
                 }
             }
         }
-        // Visual luggage bag icons header matching video frame 00:20
+
+        // Distinct FocusShield Profiles Header
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            profiles.take(3).forEach { p ->
-                val isActive = p.id == currentBag?.id
-                Icon(
-                    imageVector = Icons.Default.Luggage,
-                    contentDescription = null,
-                    tint = if (isActive) colors.primary else colors.textMuted,
-                    modifier = Modifier.size(54.dp).padding(horizontal = 6.dp)
+            Icon(
+                imageVector = Icons.Default.Shield,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Focus Profiles",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "Blacklists block distractions; Whitelists lock everything except essential apps.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textMuted
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Profile / Bag Tabs
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            profiles.forEach { profile ->
-                val isSelected = profile.id == currentBag?.id
-                Surface(
-                    onClick = { onSelectProfile(profile.id) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = profile.name,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-            // Add Bag button
-            IconButton(
-                onClick = { showCreateDialog = true },
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(colors.surface)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Bag", tint = colors.textPrimary)
-            }
-        }
-
-        if (currentBag != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Bag description tooltip matching video
+        if (profiles.isEmpty()) {
+            // Empty state when no profiles exist
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.surface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = currentBag.name,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = colors.textPrimary
-                        )
-                        Switch(
-                            checked = currentBag.isEnabled,
-                            onCheckedChange = { onToggleProfile(currentBag.id, it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = colors.primary
-                            )
-                        )
-                    }
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "No Focus Profiles Yet",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = if (currentBag.blockMode == BlockMode.WHITELIST)
-                            "The apps you pack stay usable during a block. All other apps on your phone are locked."
-                        else
-                            "The apps you pack will be blocked during focus sessions. Rest of phone stays normal.",
+                        text = "Create your first profile to configure which apps and websites to block or allow.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
+                        color = colors.textMuted,
+                        textAlign = TextAlign.Center
                     )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Mode Switcher buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showCreateDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
+                        Text("+ Create First Profile", color = if (colors.isDark) colors.primary else Color.White)
+                    }
+                }
+            }
+        } else {
+            // Profile selector pills
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(profiles) { profile ->
+                        val isSelected = profile.id == currentProfile?.id
                         Surface(
-                            onClick = { onSetBagMode(currentBag.id, BlockMode.WHITELIST) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (currentBag.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (currentBag.blockMode == BlockMode.WHITELIST) colors.primary else colors.border)
+                            onClick = { onSelectProfile(profile.id) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border)
                         ) {
-                            Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = "🔒 Whitelist",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (currentBag.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
-                                )
-                            }
-                        }
-                        Surface(
-                            onClick = { onSetBagMode(currentBag.id, BlockMode.BLACKLIST) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (currentBag.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (currentBag.blockMode == BlockMode.BLACKLIST) colors.primary else colors.border)
-                        ) {
-                            Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "🛡️ Blacklist",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (currentBag.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
+                                    text = profile.name,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
                 }
+                // Add Profile button
+                IconButton(
+                    onClick = { showCreateDialog = true },
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(colors.surface)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Profile", tint = colors.textPrimary)
+                }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            if (currentProfile != null) {
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // 3-Column Packed Apps Grid with "+" buttons
-            Text(
-                text = if (currentBag.blockMode == BlockMode.WHITELIST) "Packed Apps (Stay Usable)" else "Packed Apps (Blocked)",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = colors.textPrimary
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Grid of app slots (3 columns)
-            val slots = packedApps + listOf(null) // append null for the "+" button slot
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                slots.chunked(3).forEach { rowApps ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowApps.forEach { app ->
-                            if (app != null) {
-                                Surface(
-                                    modifier = Modifier.weight(1f).height(92.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = colors.surface,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                // Profile configuration card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = currentProfile.name,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                IconButton(
+                                    onClick = { showDeleteConfirmDialog = true },
+                                    modifier = Modifier.size(26.dp)
                                 ) {
-                                    Box(modifier = Modifier.fillMaxSize().padding(6.dp)) {
-                                        IconButton(
-                                            onClick = { onRemoveApp(currentBag.id, app.packageName) },
-                                            modifier = Modifier.size(18.dp).align(Alignment.TopEnd)
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = colors.textMuted, modifier = Modifier.size(14.dp))
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete Profile",
+                                        tint = colors.textMuted,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = currentProfile.isEnabled,
+                                onCheckedChange = { onToggleProfile(currentProfile.id, it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = colors.primary
+                                )
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (currentProfile.blockMode == BlockMode.WHITELIST)
+                                "Whitelist Mode (Kiosk) — Only apps and domains listed below can run. All other apps on your phone are locked out."
+                            else
+                                "Blacklist Mode — Apps and domains listed below will be blocked. The rest of your phone stays completely accessible.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textMuted
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Mode Switcher buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                onClick = { onSetProfileMode(currentProfile.id, BlockMode.WHITELIST) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (currentProfile.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (currentProfile.blockMode == BlockMode.WHITELIST) colors.primary else colors.border)
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "🔒 Whitelist",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (currentProfile.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
+                                    )
+                                }
+                            }
+                            Surface(
+                                onClick = { onSetProfileMode(currentProfile.id, BlockMode.BLACKLIST) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (currentProfile.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (currentProfile.blockMode == BlockMode.BLACKLIST) colors.primary else colors.border)
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "🛡️ Blacklist",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (currentProfile.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Apps Grid with "+" buttons
+                Text(
+                    text = if (currentProfile.blockMode == BlockMode.WHITELIST) "Permitted Apps (Stay Usable)" else "Blocked Apps (${packedApps.size})",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Grid of app slots (3 columns)
+                val slots = packedApps + listOf(null) // append null for the "+" button slot
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    slots.chunked(3).forEach { rowApps ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowApps.forEach { app ->
+                                if (app != null) {
+                                    Surface(
+                                        modifier = Modifier.weight(1f).height(92.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = colors.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                                    ) {
+                                        Box(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+                                            IconButton(
+                                                onClick = { onRemoveApp(currentProfile.id, app.packageName) },
+                                                modifier = Modifier.size(18.dp).align(Alignment.TopEnd)
+                                            ) {
+                                                Icon(Icons.Default.Close, contentDescription = "Remove", tint = colors.textMuted, modifier = Modifier.size(14.dp))
+                                            }
+                                            Column(
+                                                modifier = Modifier.fillMaxSize(),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                AppIconView(packageName = app.packageName, modifier = Modifier.size(34.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = app.appName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = colors.textPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
                                         }
+                                    }
+                                } else {
+                                    // Add App Slot
+                                    Surface(
+                                        onClick = { onAddApps(currentProfile.id) },
+                                        modifier = Modifier.weight(1f).height(92.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = Color.Transparent,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                                    ) {
                                         Column(
                                             modifier = Modifier.fillMaxSize(),
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.Center
                                         ) {
-                                            AppIconView(packageName = app.packageName, modifier = Modifier.size(34.dp))
+                                            Icon(Icons.Default.Add, contentDescription = "Add", tint = colors.primary, modifier = Modifier.size(28.dp))
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
-                                                text = app.appName,
+                                                text = if (currentProfile.blockMode == BlockMode.WHITELIST) "Permit App" else "Block App",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = colors.textPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                textAlign = TextAlign.Center
+                                                color = colors.textMuted
                                             )
                                         }
                                     }
                                 }
-                            } else {
-                                // Add App Slot
-                                Surface(
-                                    onClick = { onAddApps(currentBag.id) },
-                                    modifier = Modifier.weight(1f).height(92.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color.Transparent,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Add", tint = colors.primary, modifier = Modifier.size(28.dp))
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("Pack App", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
-                                    }
-                                }
                             }
-                        }
-                        // Fill remaining spaces if row is incomplete
-                        repeat(3 - rowApps.size) {
-                            Spacer(modifier = Modifier.weight(1f))
+                            // Fill remaining spaces if row is incomplete
+                            repeat(3 - rowApps.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            // Websites Section
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Websites (${packedDomains.size})",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-                TextButton(onClick = { showAddDomainDialog = true }) {
-                    Text("+ Add Domain", color = colors.primary, fontWeight = FontWeight.Bold)
+                // Websites Section
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Websites (${packedDomains.size})",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    TextButton(onClick = { showAddDomainDialog = true }) {
+                        Text("+ Add Domain", color = colors.primary, fontWeight = FontWeight.Bold)
+                    }
                 }
-            }
 
-            if (packedDomains.isEmpty()) {
-                Text(
-                    text = "No websites added yet. Add domains like 'instagram.com' or '*.reddit.com'.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    packedDomains.forEach { domain ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            color = colors.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                if (packedDomains.isEmpty()) {
+                    Text(
+                        text = "No websites configured yet. Add domains like 'instagram.com' or '*.reddit.com'.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        packedDomains.forEach { domain ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                color = colors.surface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                             ) {
-                                Text(domain.pattern, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-                                IconButton(
-                                    onClick = { onRemoveDomain(domain.id) },
-                                    modifier = Modifier.size(24.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Delete", tint = colors.textMuted, modifier = Modifier.size(16.dp))
+                                    Text(domain.pattern, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
+                                    IconButton(
+                                        onClick = { onRemoveDomain(domain.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Delete", tint = colors.textMuted, modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             }
                         }
@@ -1058,52 +1206,61 @@ private fun BagsTabContent(
     }
 
     if (showCreateDialog) {
-        var bagName by remember { mutableStateOf("") }
-        var bagMode by remember { mutableStateOf(BlockMode.WHITELIST) }
+        var profileName by remember { mutableStateOf("") }
+        var profileMode by remember { mutableStateOf(BlockMode.WHITELIST) }
 
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text("New Bag", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
+            title = { Text("New Focus Profile", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = bagName,
-                        onValueChange = { bagName = it },
-                        label = { Text("Bag Name (e.g. Work, Study)") },
+                        value = profileName,
+                        onValueChange = { profileName = it },
+                        label = { Text("Profile Name (e.g. Deep Work, Study)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Bag Type:", style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text("Blocking Mode:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = colors.textPrimary)
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { bagMode = BlockMode.WHITELIST },
+                            onClick = { profileMode = BlockMode.WHITELIST },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (bagMode == BlockMode.WHITELIST) colors.primary else colors.surface
+                                containerColor = if (profileMode == BlockMode.WHITELIST) colors.primary else colors.surface
                             ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (bagMode == BlockMode.WHITELIST) colors.primary else colors.border),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (profileMode == BlockMode.WHITELIST) colors.primary else colors.border),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Whitelist", color = if (bagMode == BlockMode.WHITELIST) Color.White else colors.textPrimary)
+                            Text("🔒 Whitelist", color = if (profileMode == BlockMode.WHITELIST) Color.White else colors.textPrimary)
                         }
                         Button(
-                            onClick = { bagMode = BlockMode.BLACKLIST },
+                            onClick = { profileMode = BlockMode.BLACKLIST },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (bagMode == BlockMode.BLACKLIST) colors.primary else colors.surface
+                                containerColor = if (profileMode == BlockMode.BLACKLIST) colors.primary else colors.surface
                             ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (bagMode == BlockMode.BLACKLIST) colors.primary else colors.border),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (profileMode == BlockMode.BLACKLIST) colors.primary else colors.border),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Blacklist", color = if (bagMode == BlockMode.BLACKLIST) Color.White else colors.textPrimary)
+                            Text("🛡️ Blacklist", color = if (profileMode == BlockMode.BLACKLIST) Color.White else colors.textPrimary)
                         }
                     }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (profileMode == BlockMode.WHITELIST)
+                            "Whitelist: Locks entire phone except chosen essential apps."
+                        else
+                            "Blacklist: Phone stays normal, but chosen distracting apps/sites are blocked.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (bagName.isNotBlank()) {
-                        onCreateBag(bagName.trim(), bagMode)
+                    if (profileName.isNotBlank()) {
+                        onCreateProfile(profileName.trim(), profileMode)
                         showCreateDialog = false
                     }
                 }) {
@@ -1118,7 +1275,30 @@ private fun BagsTabContent(
         )
     }
 
-    if (showAddDomainDialog && currentBag != null) {
+    if (showDeleteConfirmDialog && currentProfile != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete Profile", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
+            text = { Text("Are you sure you want to delete '${currentProfile.name}'? All configured apps and domains for this profile will be removed.", color = colors.textMuted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteProfile(currentProfile.id)
+                    showDeleteConfirmDialog = false
+                }) {
+                    Text("Delete", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel", color = colors.textMuted)
+                }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    if (showAddDomainDialog && currentProfile != null) {
         var domainPattern by remember { mutableStateOf("") }
         var isWildcard by remember { mutableStateOf(false) }
 
@@ -1130,7 +1310,7 @@ private fun BagsTabContent(
                     OutlinedTextField(
                         value = domainPattern,
                         onValueChange = { domainPattern = it },
-                        label = { Text("Domain (e.g. twitter.com)") },
+                        label = { Text("Domain (e.g. twitter.com or *.reddit.com)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1139,7 +1319,7 @@ private fun BagsTabContent(
             confirmButton = {
                 TextButton(onClick = {
                     if (domainPattern.isNotBlank()) {
-                        onAddDomain(currentBag.id, domainPattern.trim(), isWildcard)
+                        onAddDomain(currentProfile.id, domainPattern.trim(), isWildcard)
                         showAddDomainDialog = false
                     }
                 }) {
@@ -1165,7 +1345,8 @@ private fun RoutinesTabContent(
     schedules: List<Schedule>,
     onSelectProfile: (Long) -> Unit,
     onSaveSchedule: (Schedule) -> Unit,
-    onDeleteSchedule: (Long) -> Unit
+    onDeleteSchedule: (Long) -> Unit,
+    onNavigateToProfiles: () -> Unit
 ) {
     val colors = BlockitTheme.colors
     val currentBag = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
@@ -1220,7 +1401,7 @@ private fun RoutinesTabContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Target Bag Selector for Routines
+        // Target Profile Selector for Routines
         if (profiles.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1258,7 +1439,45 @@ private fun RoutinesTabContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        if (schedules.isEmpty()) {
+        if (profiles.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "No Profiles Created Yet",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Create a focus profile first before creating automated routines.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = onNavigateToProfiles,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            "+ Go to Profiles",
+                            color = if (colors.isDark) colors.primary else Color.White
+                        )
+                    }
+                }
+            }
+        } else if (schedules.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),

@@ -42,7 +42,7 @@ abstract class BlockItDatabase : RoomDatabase() {
     abstract fun blockEventDao(): BlockEventDao
 
     companion object {
-        private const val DATABASE_NAME = "blockit.db"
+        private const val DATABASE_NAME = "focus_shield.db"
 
         val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -50,33 +50,14 @@ abstract class BlockItDatabase : RoomDatabase() {
             }
         }
 
-        fun create(context: Context, coroutineScope: CoroutineScope): BlockItDatabase {
+        fun create(context: Context): BlockItDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 BlockItDatabase::class.java,
                 DATABASE_NAME
             ).addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigration()
-            .addCallback(object : Callback() {
-                override fun onCreate(db: SupportSQLiteDatabase) {
-                    super.onCreate(db)
-                    // Prepopulate with default profiles: Focus, Sleep, Study
-                    coroutineScope.launch(Dispatchers.IO) {
-                        val now = System.currentTimeMillis()
-                        db.execSQL(
-                            "INSERT INTO profiles (id, name, colorHex, iconKey, isEnabled, blockMode, createdAt) VALUES " +
-                                    "(1, 'Focus', 4284612846, 'focus', 1, 'BLACKLIST', $now)," +
-                                    "(2, 'Sleep', 4281358249, 'bed', 0, 'BLACKLIST', ${now + 1})," +
-                                    "(3, 'Study', 4282562473, 'book', 0, 'BLACKLIST', ${now + 2})"
-                        )
-                        // Prepopulate default distracting website patterns in Focus profile
-                        db.execSQL("INSERT INTO blocked_domains (profileId, pattern, isWildcard) VALUES (1, 'instagram.com', 0)")
-                        db.execSQL("INSERT INTO blocked_domains (profileId, pattern, isWildcard) VALUES (1, 'tiktok.com', 0)")
-                        db.execSQL("INSERT INTO blocked_domains (profileId, pattern, isWildcard) VALUES (1, 'twitter.com', 0)")
-                        db.execSQL("INSERT INTO blocked_domains (profileId, pattern, isWildcard) VALUES (1, 'x.com', 0)")
-                    }
-                }
-            }).build()
+            .build()
         }
     }
 }

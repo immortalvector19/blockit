@@ -21,7 +21,7 @@ class AppContainer(private val context: Context) {
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val database: BlockItDatabase by lazy {
-        BlockItDatabase.create(context, applicationScope)
+        BlockItDatabase.create(context)
     }
 
     val preferenceManager: PreferenceManager by lazy {

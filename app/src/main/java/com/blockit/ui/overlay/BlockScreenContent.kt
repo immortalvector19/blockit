@@ -253,7 +253,7 @@ fun BlockScreenContent(
                     Icon(imageVector = Icons.Default.Home, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Return to Home Screen",
+                        text = if (isWhitelistBlock) "Focus Mode Active" else "Return to Home Screen",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }

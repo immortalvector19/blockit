@@ -30,11 +30,9 @@ class BlockAccessibilityService : AccessibilityService() {
 
         serviceInfo = serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOWS_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                    AccessibilityEvent.TYPE_WINDOWS_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             notificationTimeout = 50
         }
 
@@ -42,11 +40,13 @@ class BlockAccessibilityService : AccessibilityService() {
     }
 
     private fun resolveHomePackages() {
-        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-        }
-        val resolveInfos = packageManager.queryIntentActivities(homeIntent, PackageManager.MATCH_DEFAULT_ONLY)
-        homePackages = resolveInfos.mapNotNull { it.activityInfo?.packageName }.toSet()
+        try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+            }
+            val resolveInfos = packageManager.queryIntentActivities(homeIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            homePackages = resolveInfos.mapNotNull { it.activityInfo?.packageName }.toSet()
+        } catch (_: Exception) {}
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -55,10 +55,13 @@ class BlockAccessibilityService : AccessibilityService() {
         val pkgName = event.packageName?.toString() ?: return
         val snapshot = ruleEvaluator.getSnapshot()
 
-        // Always ignore BlockIt itself to prevent self-locking
+        // Ignore events from our own app, UNLESS the user opened the main settings screen
         if (pkgName == packageName) {
-            if (overlayController.isOverlayShowing()) {
-                overlayController.hideBlockOverlay()
+            val cls = event.className?.toString() ?: ""
+            if (cls.contains("MainActivity")) {
+                if (overlayController.isOverlayShowing()) {
+                    overlayController.hideBlockOverlay()
+                }
             }
             return
         }
@@ -71,8 +74,16 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
+        if (homePackages.isEmpty()) {
+            resolveHomePackages()
+        }
+        val isHome = homePackages.contains(pkgName) ||
+                pkgName.contains("launcher", ignoreCase = true) ||
+                pkgName == "com.google.android.apps.nexuslauncher" ||
+                pkgName == "com.android.launcher3"
+
         // If user is on the Home Launcher:
-        if (homePackages.contains(pkgName)) {
+        if (isHome) {
             if (snapshot.hasActiveWhitelist) {
                 // Whitelist mode: overlay the home screen and show permitted apps
                 overlayController.showBlockOverlay(
@@ -198,7 +209,9 @@ class BlockAccessibilityService : AccessibilityService() {
         val text = node.text?.toString()
         val desc = node.contentDescription?.toString()
         if (text?.contains("BlockIt", ignoreCase = true) == true ||
-            desc?.contains("BlockIt", ignoreCase = true) == true
+            text?.contains("FocusShield", ignoreCase = true) == true ||
+            desc?.contains("BlockIt", ignoreCase = true) == true ||
+            desc?.contains("FocusShield", ignoreCase = true) == true
         ) {
             return true
         }
