@@ -27,6 +27,7 @@ import com.blockit.ui.screens.dashboard.MainDashboardScreen
 import com.blockit.ui.screens.dashboard.MainDashboardViewModel
 import com.blockit.ui.screens.guide.HowItWorksScreen
 import com.blockit.ui.screens.guide.SetupGuideScreen
+import com.blockit.ui.screens.health.HealthScreen
 import com.blockit.ui.screens.insights.InsightsScreen
 import com.blockit.ui.screens.insights.InsightsViewModel
 import com.blockit.ui.screens.onboarding.OnboardingScreen
@@ -47,6 +48,7 @@ object NavRoutes {
     const val ADD_APPS = "profile/{profileId}/add_apps"
     const val SCHEDULES = "profile/{profileId}/schedules"
     const val SETTINGS_HUB = "settings"
+    const val HEALTH = "settings/health"
     const val THEME_SETTINGS = "settings/theme"
     const val STRICT_MODE = "settings/strict_mode"
     const val SETUP_GUIDE = "settings/setup_guide"
@@ -198,12 +200,19 @@ fun BlockItNavHost(
 
         composable(NavRoutes.SETTINGS_HUB) {
             SettingsHubScreen(
+                onNavigateToHealth = { navController.navigate(NavRoutes.HEALTH) },
                 onNavigateToThemeSettings = { navController.navigate(NavRoutes.THEME_SETTINGS) },
                 onNavigateToStrictMode = { navController.navigate(NavRoutes.STRICT_MODE) },
                 onNavigateToSetupGuide = { navController.navigate(NavRoutes.SETUP_GUIDE) },
                 onNavigateToBackupRestore = { navController.navigate(NavRoutes.BACKUP_RESTORE) },
                 onNavigateToHowItWorks = { navController.navigate(NavRoutes.HOW_IT_WORKS) },
                 onNavigateToOnboarding = { navController.navigate(NavRoutes.ONBOARDING) },
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.HEALTH) {
+            HealthScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }

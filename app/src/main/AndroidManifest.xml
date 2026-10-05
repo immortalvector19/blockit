@@ -10,6 +10,9 @@
     <!-- Overlay permission for instant full-screen calm block screen -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Direct battery optimization exemption dialog -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Fallback usage stats permission -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"

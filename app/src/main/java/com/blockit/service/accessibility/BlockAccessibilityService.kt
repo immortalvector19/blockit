@@ -12,6 +12,8 @@ import com.blockit.domain.model.TargetType
 import com.blockit.service.overlay.OverlayController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class BlockAccessibilityService : AccessibilityService() {
@@ -28,15 +30,44 @@ class BlockAccessibilityService : AccessibilityService() {
         overlayController = OverlayController(this)
         appScope = container.applicationScope
 
+        com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(true)
+        com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = {
+            overlayController.showBlockOverlay(
+                targetIdentifier = "Diagnostic Test",
+                profileName = "FocusShield Diagnostics",
+                reason = "Testing WindowManager overlay rendering & input dispatch",
+                onHomeClicked = {
+                    overlayController.hideBlockOverlay()
+                }
+            )
+        }
+
         serviceInfo = serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOWS_CHANGED
+                    AccessibilityEvent.TYPE_WINDOWS_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             notificationTimeout = 50
         }
 
         resolveHomePackages()
+
+        // Active Session Watchdog: polls foreground package every 1s during active blocks to prevent bypass
+        appScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                delay(1000)
+                val snapshot = ruleEvaluator.getSnapshot()
+                val hasActiveRules = snapshot.blockedPackages.isNotEmpty() || snapshot.hasActiveWhitelist
+                if (hasActiveRules && !overlayController.isOverlayShowing()) {
+                    val root = rootInActiveWindow
+                    val fgPkg = root?.packageName?.toString() ?: ""
+                    if (fgPkg.isNotBlank() && !isHomePackage(fgPkg) && fgPkg != packageName) {
+                        checkAndBlockForegroundApp(fgPkg)
+                    }
+                }
+            }
+        }
 
         // Reactively observe snapshot changes
         appScope.launch(Dispatchers.Main) {
@@ -84,6 +115,7 @@ class BlockAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         val pkgName = event.packageName?.toString() ?: return
+        com.blockit.core.health.BlockHealthMonitor.recordAccessibilityEvent(pkgName)
         val snapshot = ruleEvaluator.getSnapshot()
 
         // Ignore events from our own app, UNLESS the user opened the main settings screen
@@ -164,32 +196,7 @@ class BlockAccessibilityService : AccessibilityService() {
         }
 
         // Evaluate if the foreground app is blocked
-        val result = ruleEvaluator.isAppBlocked(pkgName)
-        if (result.isBlocked) {
-            val profile = result.profileName ?: "Focus"
-            val reason = result.reason ?: "App blocked"
-
-            overlayController.showBlockOverlay(
-                targetIdentifier = pkgName,
-                profileName = profile,
-                reason = reason,
-                isWhitelistBlock = result.isWhitelistBlock,
-                allowedApps = result.allowedApps,
-                onHomeClicked = {
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                },
-                onOpenAllowedApp = { appPkg ->
-                    overlayController.hideBlockOverlay()
-                    val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
-                    launchIntent?.let {
-                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                        startActivity(it)
-                    }
-                }
-            )
-
-            // Log event asynchronously
-            logBlockEvent(pkgName, TargetType.APP, profile)
+        if (checkAndBlockForegroundApp(pkgName)) {
             return
         } else {
             // An allowed user app has come to the foreground.
@@ -226,6 +233,40 @@ class BlockAccessibilityService : AccessibilityService() {
                 }
             }
         }
+    }
+
+    private fun checkAndBlockForegroundApp(pkgName: String): Boolean {
+        val result = ruleEvaluator.isAppBlocked(pkgName)
+        if (result.isBlocked) {
+            val profile = result.profileName ?: "Focus"
+            val reason = result.reason ?: "App blocked"
+
+            // Eject immediately to Home to prevent interaction beneath or bypass
+            performGlobalAction(GLOBAL_ACTION_HOME)
+
+            overlayController.showBlockOverlay(
+                targetIdentifier = pkgName,
+                profileName = profile,
+                reason = reason,
+                isWhitelistBlock = result.isWhitelistBlock,
+                allowedApps = result.allowedApps,
+                onHomeClicked = {
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                },
+                onOpenAllowedApp = { appPkg ->
+                    overlayController.hideBlockOverlay()
+                    val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
+                    launchIntent?.let {
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                        startActivity(it)
+                    }
+                }
+            )
+
+            logBlockEvent(pkgName, TargetType.APP, profile)
+            return true
+        }
+        return false
     }
 
     private fun logBlockEvent(identifier: String, type: TargetType, profile: String) {
@@ -270,6 +311,8 @@ class BlockAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(false)
+        com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = null
         if (::overlayController.isInitialized) {
             overlayController.hideBlockOverlay()
         }

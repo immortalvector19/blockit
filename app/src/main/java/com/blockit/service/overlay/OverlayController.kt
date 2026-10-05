@@ -105,10 +105,11 @@ class OverlayController(private val context: Context) {
             // If SYSTEM_ALERT_WINDOW permission is granted, use instant full-screen Compose overlay
             if (Settings.canDrawOverlays(context)) {
                 try {
+                    val themedContext = android.view.ContextThemeWrapper(context, com.blockit.R.style.Theme_BlockIt)
                     val owner = OverlayLifecycleOwner()
                     lifecycleOwner = owner
 
-                    val container = object : android.widget.FrameLayout(context) {
+                    val container = object : android.widget.FrameLayout(themedContext) {
                         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
                             if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
                                 currentData?.onHomeClicked?.invoke()
@@ -118,7 +119,13 @@ class OverlayController(private val context: Context) {
                         }
                     }
 
-                    val composeView = ComposeView(context).apply {
+                    // Attach lifecycle owners to container (the window root view)
+                    container.setViewTreeLifecycleOwner(owner)
+                    container.setViewTreeViewModelStoreOwner(owner)
+                    container.setViewTreeSavedStateRegistryOwner(owner)
+
+                    val composeView = ComposeView(themedContext).apply {
+                        setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
                         setViewTreeLifecycleOwner(owner)
                         setViewTreeViewModelStoreOwner(owner)
                         setViewTreeSavedStateRegistryOwner(owner)
@@ -161,7 +168,8 @@ class OverlayController(private val context: Context) {
                         },
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                                 WindowManager.LayoutParams.FLAG_FULLSCREEN or
-                                WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
+                                WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS or
+                                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                         PixelFormat.TRANSLUCENT
                     ).apply {
                         gravity = Gravity.CENTER
@@ -171,7 +179,8 @@ class OverlayController(private val context: Context) {
                     overlayView = container
                     isShowing = true
                     return@post
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.e("OverlayController", "Failed to add window overlay view", e)
                     // Fall back to Activity launch if WindowManager addView fails
                 }
             }

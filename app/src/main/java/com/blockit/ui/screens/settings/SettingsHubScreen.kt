@@ -38,11 +38,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Palette
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsHubScreen(
+    onNavigateToHealth: () -> Unit,
     onNavigateToThemeSettings: () -> Unit,
     onNavigateToStrictMode: () -> Unit,
     onNavigateToSetupGuide: () -> Unit,
@@ -79,6 +81,13 @@ fun SettingsHubScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            SettingsNavigationCard(
+                title = "Engine Health & Diagnostics",
+                subtitle = "Live accessibility status, event timestamp, overlay test, and battery exemption",
+                icon = Icons.Default.MonitorHeart,
+                onClick = onNavigateToHealth
+            )
+
             SettingsNavigationCard(
                 title = "Appearance & Themes",
                 subtitle = "Dark mode toggle, cream paper aesthetic, and mechanical accent palettes",
