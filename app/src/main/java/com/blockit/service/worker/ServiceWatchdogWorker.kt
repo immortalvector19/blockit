@@ -28,6 +28,9 @@ class ServiceWatchdogWorker(
             // 3. Ensure next boundary exact alarm is armed
             container.scheduleManager.scheduleNextBoundaryAlarm()
 
+            // 4. Restore active session notification if ongoing
+            container.focusSessionManager.restoreActiveSessionNotification()
+
             Result.success()
         } catch (_: Exception) {
             Result.retry()

@@ -21,6 +21,7 @@ class BlockAccessibilityService : AccessibilityService() {
     private lateinit var ruleEvaluator: RuleEvaluator
     private lateinit var overlayController: OverlayController
     private lateinit var appScope: CoroutineScope
+    private lateinit var intentPassManager: com.blockit.core.intentgate.IntentPassManager
     private var homePackages: Set<String> = emptySet()
 
     override fun onServiceConnected() {
@@ -29,6 +30,7 @@ class BlockAccessibilityService : AccessibilityService() {
         ruleEvaluator = container.ruleEvaluator
         overlayController = OverlayController(this)
         appScope = container.applicationScope
+        intentPassManager = container.intentPassManager
 
         com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(true)
         com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = {
@@ -144,6 +146,13 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
+        if (intentPassManager.hasActivePass(pkgName)) {
+            if (overlayController.isOverlayShowing()) {
+                overlayController.hideBlockOverlay()
+            }
+            return
+        }
+
         if (homePackages.isEmpty()) {
             resolveHomePackages()
         }
@@ -236,6 +245,7 @@ class BlockAccessibilityService : AccessibilityService() {
     }
 
     private fun checkAndBlockForegroundApp(pkgName: String): Boolean {
+        if (intentPassManager.hasActivePass(pkgName)) return false
         val result = ruleEvaluator.isAppBlocked(pkgName)
         if (result.isBlocked) {
             val profile = result.profileName ?: "Focus"
@@ -250,12 +260,24 @@ class BlockAccessibilityService : AccessibilityService() {
                 reason = reason,
                 isWhitelistBlock = result.isWhitelistBlock,
                 allowedApps = result.allowedApps,
+                isHardLock = false,
+                canRequestPass = intentPassManager.canRequestPass(pkgName),
+                remainingPasses = intentPassManager.getRemainingPassesToday(),
                 onHomeClicked = {
                     performGlobalAction(GLOBAL_ACTION_HOME)
                 },
                 onOpenAllowedApp = { appPkg ->
                     overlayController.hideBlockOverlay()
                     val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
+                    launchIntent?.let {
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                        startActivity(it)
+                    }
+                },
+                onGrantPass = {
+                    intentPassManager.grantPass(pkgName)
+                    overlayController.hideBlockOverlay()
+                    val launchIntent = packageManager.getLaunchIntentForPackage(pkgName)
                     launchIntent?.let {
                         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                         startActivity(it)

@@ -35,8 +35,12 @@ data class OverlayData(
     val reason: String,
     val isWhitelistBlock: Boolean = false,
     val allowedApps: List<String> = emptyList(),
+    val isHardLock: Boolean = false,
+    val canRequestPass: Boolean = false,
+    val remainingPasses: Int = 0,
     val onHomeClicked: () -> Unit,
-    val onOpenAllowedApp: ((String) -> Unit)? = null
+    val onOpenAllowedApp: ((String) -> Unit)? = null,
+    val onGrantPass: (() -> Unit)? = null
 )
 
 class OverlayLifecycleOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
@@ -81,8 +85,12 @@ class OverlayController(private val context: Context) {
         reason: String,
         isWhitelistBlock: Boolean = false,
         allowedApps: List<String> = emptyList(),
+        isHardLock: Boolean = false,
+        canRequestPass: Boolean = false,
+        remainingPasses: Int = 0,
         onHomeClicked: () -> Unit,
-        onOpenAllowedApp: ((String) -> Unit)? = null
+        onOpenAllowedApp: ((String) -> Unit)? = null,
+        onGrantPass: (() -> Unit)? = null
     ) {
         val data = OverlayData(
             targetIdentifier = targetIdentifier,
@@ -90,8 +98,12 @@ class OverlayController(private val context: Context) {
             reason = reason,
             isWhitelistBlock = isWhitelistBlock,
             allowedApps = allowedApps,
+            isHardLock = isHardLock,
+            canRequestPass = canRequestPass,
+            remainingPasses = remainingPasses,
             onHomeClicked = onHomeClicked,
-            onOpenAllowedApp = onOpenAllowedApp
+            onOpenAllowedApp = onOpenAllowedApp,
+            onGrantPass = onGrantPass
         )
 
         mainHandler.post {
@@ -138,11 +150,17 @@ class OverlayController(private val context: Context) {
                                     reason = active.reason,
                                     isWhitelistBlock = active.isWhitelistBlock,
                                     allowedApps = active.allowedApps,
+                                    isHardLock = active.isHardLock,
+                                    canRequestPass = active.canRequestPass,
+                                    remainingPasses = active.remainingPasses,
                                     onHomeClicked = {
                                         active.onHomeClicked()
                                     },
                                     onOpenAllowedApp = { pkg ->
                                         active.onOpenAllowedApp?.invoke(pkg)
+                                    },
+                                    onGrantPass = {
+                                        active.onGrantPass?.invoke()
                                     }
                                 )
                             }

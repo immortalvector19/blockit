@@ -178,11 +178,7 @@ fun SetupGuideScreen(
                 icon = Icons.Default.Layers,
                 buttonText = "Grant Overlay Permission",
                 onConfigure = {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
-                    context.startActivity(intent)
+                    com.blockit.core.permission.PermissionIntents.launchOverlaySettings(context)
                 }
             )
 
@@ -226,11 +222,7 @@ fun SetupGuideScreen(
                 icon = Icons.Default.BatteryChargingFull,
                 buttonText = "Disable Battery Optimization",
                 onConfigure = {
-                    val intent = Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:${context.packageName}")
-                    ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
-                    context.startActivity(intent)
+                    com.blockit.core.permission.PermissionIntents.launchBatteryExemption(context)
                 }
             )
 

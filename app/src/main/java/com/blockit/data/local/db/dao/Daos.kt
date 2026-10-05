@@ -147,6 +147,9 @@ interface FocusSessionDao {
     @Query("SELECT * FROM focus_sessions WHERE isActive = 1 AND endTimestamp > :currentTimeMs")
     fun observeActiveSessions(currentTimeMs: Long): Flow<List<FocusSessionEntity>>
 
+    @Query("SELECT * FROM focus_sessions ORDER BY startTimestamp DESC")
+    fun observeAllSessions(): Flow<List<FocusSessionEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: FocusSessionEntity): Long
 
@@ -167,6 +170,9 @@ data class TargetBlockStat(
 interface BlockEventDao {
     @Insert
     suspend fun insertEvent(event: BlockEventEntity): Long
+
+    @Query("SELECT * FROM block_events WHERE timestamp >= :sinceTimestamp ORDER BY timestamp ASC")
+    fun observeEventsSince(sinceTimestamp: Long): Flow<List<BlockEventEntity>>
 
     @Query("SELECT * FROM block_events ORDER BY timestamp DESC LIMIT :limit")
     fun observeRecentEvents(limit: Int = 100): Flow<List<BlockEventEntity>>

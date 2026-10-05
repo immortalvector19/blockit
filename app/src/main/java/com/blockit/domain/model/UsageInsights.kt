@@ -10,12 +10,21 @@ data class TargetStatItem(
     val count: Int
 )
 
+data class DailyStatItem(
+    val dayLabel: String,
+    val count: Int,
+    val dateMs: Long
+)
+
 data class UsageInsightsData(
     val totalBlocked: Int = 0,
     val blockedToday: Int = 0,
     val blockedThisWeek: Int = 0,
+    val totalFocusMinutes: Int = 0,
+    val formattedFocusTime: String = "0m",
     val estimatedMinutesSaved: Int = 0,
     val formattedTimeSaved: String = "0m",
+    val dailyStats: List<DailyStatItem> = emptyList(),
     val topTargets: List<TargetStatItem> = emptyList(),
     val recentEvents: List<BlockEventEntity> = emptyList()
 )
@@ -31,7 +40,7 @@ object TimeSavedCalculator {
         return blockedCount * minutesPerAttempt
     }
 
-    fun formatTimeSaved(totalMinutes: Int): String {
+    fun formatMinutes(totalMinutes: Int): String {
         if (totalMinutes <= 0) return "0m"
         val hours = totalMinutes / 60
         val remainingMinutes = totalMinutes % 60
@@ -42,6 +51,8 @@ object TimeSavedCalculator {
             else -> "${hours}h ${remainingMinutes}m"
         }
     }
+
+    fun formatTimeSaved(totalMinutes: Int): String = formatMinutes(totalMinutes)
 
     fun getStartOfDayTimestamp(currentTimeMs: Long = System.currentTimeMillis()): Long {
         val calendar = Calendar.getInstance().apply {

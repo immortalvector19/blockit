@@ -57,14 +57,23 @@ class AppContainer(private val context: Context) {
         ScheduleManager(context, database)
     }
 
+    val focusNotificationManager: com.blockit.service.notification.FocusNotificationManager by lazy {
+        com.blockit.service.notification.FocusNotificationManager(context)
+    }
+
+    val intentPassManager: com.blockit.core.intentgate.IntentPassManager by lazy {
+        com.blockit.core.intentgate.IntentPassManager()
+    }
+
     val focusSessionManager: FocusSessionManager by lazy {
-        FocusSessionManager(database, ruleEvaluator, scheduleManager)
+        FocusSessionManager(database, ruleEvaluator, scheduleManager, focusNotificationManager)
     }
 
     val usageInsightsRepository: com.blockit.data.repository.UsageInsightsRepository by lazy {
         com.blockit.data.repository.UsageInsightsRepository(
             blockEventDao = database.blockEventDao(),
-            installedAppsRepository = installedAppsRepository
+            installedAppsRepository = installedAppsRepository,
+            focusSessionDao = database.focusSessionDao()
         )
     }
 
@@ -82,6 +91,7 @@ class AppContainer(private val context: Context) {
         applicationScope.launch {
             ruleEvaluator.refreshRules()
             scheduleManager.scheduleNextBoundaryAlarm()
+            focusSessionManager.restoreActiveSessionNotification()
         }
         // Enqueue periodic background watchdog
         ServiceWatchdogWorker.enqueuePeriodic(context)

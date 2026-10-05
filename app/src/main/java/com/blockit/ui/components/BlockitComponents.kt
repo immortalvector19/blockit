@@ -119,17 +119,25 @@ fun SlideToActButton(
     val colors = BlockitTheme.colors
     var offsetX by remember { mutableFloatStateOf(0f) }
 
+    val trackBg = if (isActive) {
+        if (colors.isDark) Color(0xFF291B24) else Color(0xFFFEE2E2)
+    } else colors.surface
+
+    val trackBorder = if (isActive) {
+        if (colors.isDark) Color(0xFFDC2626).copy(alpha = 0.5f) else Color(0xFFFCA5A5)
+    } else colors.border
+
+    val labelColor = if (isActive) {
+        if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF991B1B)
+    } else colors.textMuted
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .height(60.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(if (isActive) Color(0xFF291B24) else colors.surface)
-            .border(
-                1.dp,
-                if (isActive) Color(0xFFDC2626).copy(alpha = 0.5f) else colors.border,
-                RoundedCornerShape(18.dp)
-            ),
+            .background(trackBg)
+            .border(1.dp, trackBorder, RoundedCornerShape(18.dp)),
         contentAlignment = Alignment.CenterStart
     ) {
         val maxDragPx = with(LocalDensity.current) { (maxWidth - 60.dp).toPx() }
@@ -145,7 +153,7 @@ fun SlideToActButton(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp
                 ),
-                color = if (isActive) Color(0xFFF87171) else colors.textMuted
+                color = labelColor
             )
         }
 

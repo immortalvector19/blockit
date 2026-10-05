@@ -149,7 +149,7 @@ fun OnboardingScreen(
             // Header Progress & Brand Identity
             OnboardingHeader(
                 currentStep = currentStep,
-                totalSteps = 4,
+                totalSteps = 5,
                 onStepClick = { target ->
                     if (target < currentStep) currentStep = target
                 }
@@ -200,11 +200,7 @@ fun OnboardingScreen(
                         hasOverlay = hasOverlay,
                         onRequestAccessibility = { showAccessibilityPreDialog = true },
                         onRequestOverlay = {
-                            val intent = Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            context.startActivity(intent)
+                            com.blockit.core.permission.PermissionIntents.launchOverlaySettings(context)
                         },
                         onBack = { currentStep = 0 },
                         onNext = {
@@ -216,15 +212,7 @@ fun OnboardingScreen(
                         hasBattery = hasBattery,
                         hasNotification = hasNotification,
                         onRequestBattery = {
-                            try {
-                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                }
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                context.startActivity(intent)
-                            }
+                            com.blockit.core.permission.PermissionIntents.launchBatteryExemption(context)
                         },
                         onRequestNotification = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -239,10 +227,25 @@ fun OnboardingScreen(
                             currentStep = 3
                         }
                     )
+                    3 -> SecurityPinStep(
+                        onPinSet = { pin ->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            scope.launch {
+                                preferenceManager.setUnlockPin(pin)
+                            }
+                            currentStep = 4
+                        },
+                        onSkip = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            currentStep = 4
+                        },
+                        onBack = { currentStep = 2 }
+                    )
                     else -> ReadyStep(
                         hasAccessibility = hasAccessibility,
                         hasOverlay = hasOverlay,
                         hasBattery = hasBattery,
+                        onFixPermissions = { currentStep = 1 },
                         onComplete = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             scope.launch {
@@ -591,7 +594,7 @@ private fun CoreEnginesStep(
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Text(
-                    text = if (hasAccessibility && hasOverlay) "Continue →" else "Next Step",
+                    text = if (hasAccessibility && hasOverlay) "Continue" else "Next Step",
                     color = if (hasAccessibility && hasOverlay) Color.White else colors.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
@@ -693,10 +696,165 @@ private fun ReliabilityStep(
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Text(
-                    text = "Continue →",
+                    text = "Continue",
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecurityPinStep(
+    onPinSet: (String) -> Unit,
+    onSkip: () -> Unit,
+    onBack: () -> Unit
+) {
+    val colors = BlockitTheme.colors
+    var pin by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "Session Security PIN",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Set an optional 4-digit PIN to prevent yourself from impulsively stopping active focus sessions early.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textMuted,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // PIN Dots Indicator
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(4) { index ->
+                    val isFilled = index < pin.length
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(if (isFilled) colors.primary else colors.surfaceVariant)
+                            .border(1.5.dp, if (isFilled) colors.primary else colors.border, androidx.compose.foundation.shape.CircleShape)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Number Pad (1-9, C, 0, Backspace)
+            Column(
+                modifier = Modifier.fillMaxWidth(0.85f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val rows = listOf(
+                    listOf("1", "2", "3"),
+                    listOf("4", "5", "6"),
+                    listOf("7", "8", "9"),
+                    listOf("C", "0", "⌫")
+                )
+                for (row in rows) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        for (key in row) {
+                            Button(
+                                onClick = {
+                                    when (key) {
+                                        "C" -> pin = ""
+                                        "⌫" -> if (pin.isNotEmpty()) pin = pin.dropLast(1)
+                                        else -> if (pin.length < 4) pin += key
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.surface),
+                                border = BorderStroke(1.dp, colors.border)
+                            ) {
+                                Text(
+                                    text = key,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Actions
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    if (pin.length == 4) {
+                        onPinSet(pin)
+                    }
+                },
+                enabled = pin.length == 4,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(
+                    text = "Lock with PIN",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, colors.border)
+                ) {
+                    Text("Back", color = colors.textPrimary)
+                }
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Skip for Now", color = colors.textMuted)
+                }
             }
         }
     }
@@ -707,9 +865,11 @@ private fun ReadyStep(
     hasAccessibility: Boolean,
     hasOverlay: Boolean,
     hasBattery: Boolean,
+    onFixPermissions: () -> Unit,
     onComplete: () -> Unit
 ) {
     val colors = BlockitTheme.colors
+    val isVerified = hasAccessibility && hasOverlay && hasBattery
 
     Column(
         modifier = Modifier
@@ -724,10 +884,10 @@ private fun ReadyStep(
         ) {
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Armed FocusShield Emblem
+            // FocusShield Emblem
             FocusShieldEmblem(
-                isArmed = true,
-                accentColor = Color(0xFF22C55E),
+                isArmed = isVerified,
+                accentColor = if (isVerified) Color(0xFF22C55E) else Color(0xFFFFB74D),
                 bodyColor = colors.surfaceVariant,
                 strokeColor = colors.border
             )
@@ -735,7 +895,7 @@ private fun ReadyStep(
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "FocusShield is Armed",
+                text = if (isVerified) "FocusShield is Ready" else "Setup Action Required",
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Black,
                     letterSpacing = (-0.5).sp
@@ -747,7 +907,10 @@ private fun ReadyStep(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Your phone is now equipped with tactical distraction defense. All rules run 100% locally on this device.",
+                text = if (isVerified)
+                    "All core engines are active and background protection is verified. Rules run 100% locally on this device."
+                else
+                    "FocusShield cannot reliably detect or block apps without verified permissions. Please grant missing permissions before proceeding.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.textMuted,
                 textAlign = TextAlign.Center,
@@ -782,53 +945,41 @@ private fun ReadyStep(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Pro-tip Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, colors.border)
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Tip: You can set a 4-digit security PIN lock in Settings > Strict Mode to prevent yourself from canceling active focus blocks.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Final Launch Button
-        Button(
-            onClick = onComplete,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text(
-                text = "Enter FocusShield",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
-            )
+        // Final Button
+        if (isVerified) {
+            Button(
+                onClick = onComplete,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = "Enter FocusShield",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
+        } else {
+            Button(
+                onClick = onFixPermissions,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = "Grant Missing Permissions",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
         }
     }
 }

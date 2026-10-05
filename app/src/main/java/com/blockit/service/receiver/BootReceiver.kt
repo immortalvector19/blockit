@@ -19,6 +19,8 @@ class BootReceiver : BroadcastReceiver() {
             container.applicationScope.launch {
                 // Re-evaluate and re-prime the rule cache following system restart or time shifts
                 container.ruleEvaluator.refreshRules()
+                container.scheduleManager.scheduleNextBoundaryAlarm()
+                container.focusSessionManager.restoreActiveSessionNotification()
             }
         }
     }
