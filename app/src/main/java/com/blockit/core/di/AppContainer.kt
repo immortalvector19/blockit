@@ -41,8 +41,12 @@ class AppContainer(private val context: Context) {
         InstalledAppsRepository(context)
     }
 
+    val systemAppResolver: com.blockit.core.system.SystemAppResolver by lazy {
+        com.blockit.core.system.AndroidSystemAppResolver(context)
+    }
+
     val ruleEvaluator: RuleEvaluator by lazy {
-        RuleEvaluator(database, applicationScope)
+        RuleEvaluator(database, applicationScope, systemAppResolver)
     }
 
     val overlayController: OverlayController by lazy {

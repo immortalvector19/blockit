@@ -126,7 +126,7 @@ fun ProfileDetailScreen(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (currentMode == BlockMode.BLACKLIST) "🛡️ Blacklist Mode" else "🔒 Whitelist Kiosk Mode",
+                        text = if (currentMode == BlockMode.BLACKLIST) "Blacklist Mode" else "Whitelist Mode",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = if (currentMode == BlockMode.BLACKLIST) Color(0xFF38BDF8) else Color(0xFF818CF8)
                     )

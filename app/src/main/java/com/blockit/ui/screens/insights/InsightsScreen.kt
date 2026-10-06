@@ -420,7 +420,7 @@ private fun RecentEventItemCard(event: BlockEventEntity) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Profile: ${event.profileName} • $formattedTime",
+                    text = "Profile: ${event.profileName} - $formattedTime",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

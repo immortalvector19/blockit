@@ -35,7 +35,8 @@ data class ActiveRuleSnapshot(
  */
 class RuleEvaluator(
     private val database: BlockItDatabase? = null,
-    private val scope: CoroutineScope? = null
+    private val scope: CoroutineScope? = null,
+    private val systemAppResolver: com.blockit.core.system.SystemAppResolver? = null
 ) {
 
     @Volatile
@@ -83,7 +84,7 @@ class RuleEvaluator(
             val schedules = schedulesByProfile[profile.id]
             if (schedules != null && schedules.isNotEmpty()) {
                 val hasMatchingSchedule = schedules.any { entity ->
-                    ScheduleEvaluator.isScheduleActiveNow(
+                    entity.isEnabled && ScheduleEvaluator.isScheduleActiveNow(
                         Schedule(
                             id = entity.id,
                             profileId = entity.profileId,
@@ -98,10 +99,8 @@ class RuleEvaluator(
                 if (hasMatchingSchedule) {
                     activeProfileIds.add(profile.id)
                 }
-            } else {
-                // If profile has no schedules defined: active whenever isEnabled is true
-                activeProfileIds.add(profile.id)
             }
+            // Profiles without an active session or active schedule are idle (not blocking)
         }
 
         // 4. Aggregate Whitelist and Blacklist rules for active profiles
@@ -149,6 +148,13 @@ class RuleEvaluator(
      * Zero-latency check if an Android package is currently blocked.
      */
     fun isAppBlocked(packageName: String): EvaluationResult {
+        if (packageName.isBlank()) return EvaluationResult(isBlocked = false)
+
+        // Essential System apps (launcher, dialer, keyboard, system UI, permission dialog, FocusShield) are NEVER blocked
+        if (systemAppResolver?.isAlwaysPermitted(packageName) == true) {
+            return EvaluationResult(isBlocked = false)
+        }
+
         val snapshot = cachedSnapshot
 
         // Whitelist mode: if active, ONLY explicitly whitelisted apps are allowed

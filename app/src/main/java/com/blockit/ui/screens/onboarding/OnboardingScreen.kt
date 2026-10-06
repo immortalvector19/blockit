@@ -261,7 +261,7 @@ fun OnboardingScreen(
 
             // Footer Privacy Guarantee
             Text(
-                text = "100% On-Device • Zero Network • No Telemetry",
+                text = "100% On-Device | Zero Network | No Telemetry",
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.textMuted
             )
@@ -593,11 +593,20 @@ private fun CoreEnginesStep(
                     .height(52.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
-                Text(
-                    text = if (hasAccessibility && hasOverlay) "Continue" else "Next Step",
-                    color = if (hasAccessibility && hasOverlay) Color.White else colors.textPrimary,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (hasAccessibility && hasOverlay) "Continue" else "Next Step",
+                        color = if (hasAccessibility && hasOverlay) Color.White else colors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (hasAccessibility && hasOverlay) Color.White else colors.textPrimary
+                    )
+                }
             }
         }
     }
@@ -695,11 +704,20 @@ private fun ReliabilityStep(
                     .height(52.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
-                Text(
-                    text = "Continue",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Continue",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
+                    )
+                }
             }
         }
     }
@@ -775,7 +793,7 @@ private fun SecurityPinStep(
                     listOf("1", "2", "3"),
                     listOf("4", "5", "6"),
                     listOf("7", "8", "9"),
-                    listOf("C", "0", "⌫")
+                    listOf("C", "0", "DEL")
                 )
                 for (row in rows) {
                     Row(
@@ -787,7 +805,7 @@ private fun SecurityPinStep(
                                 onClick = {
                                     when (key) {
                                         "C" -> pin = ""
-                                        "⌫" -> if (pin.isNotEmpty()) pin = pin.dropLast(1)
+                                        "DEL" -> if (pin.isNotEmpty()) pin = pin.dropLast(1)
                                         else -> if (pin.length < 4) pin += key
                                     }
                                 },
@@ -1126,7 +1144,7 @@ private fun PermissionSetupCard(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (isGranted) "Granted ✓" else "Action Req.",
+                            text = if (isGranted) "Granted" else "Action Req.",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = if (isGranted) Color(0xFF22C55E) else Color(0xFFEA580C)
                         )
@@ -1157,7 +1175,7 @@ private fun PermissionSetupCard(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = if (isGranted) "Active ✓" else actionText,
+                    text = if (isGranted) "Active" else actionText,
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )

@@ -372,10 +372,10 @@ private fun ProtectionStatusCard(
                     )
                     Text(
                         text = when {
-                            anyWhitelistActive -> "🔒 Whitelist Kiosk Active — Home screen locked to permitted apps"
-                            activeSession != null -> "⏳ Quick Focus Session Active"
-                            anyBlacklistActive -> "🛡️ Blacklist Guard Active (${profiles.count { it.isEnabled }} profiles active)"
-                            else -> "Standby — Enable a profile or start a quick session"
+                            anyWhitelistActive -> "Whitelist Kiosk Active - Home screen locked to permitted apps"
+                            activeSession != null -> "Quick Focus Session Active"
+                            anyBlacklistActive -> "Blacklist Guard Active (${profiles.count { it.isEnabled }} profiles active)"
+                            else -> "Standby - Enable a profile or start a quick session"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFA7F3D0)
@@ -546,7 +546,7 @@ private fun ProfileCard(
                     text = if (profile.blockMode == BlockMode.WHITELIST)
                         "${profile.appCount} allowed apps"
                     else
-                        "${profile.appCount} apps • ${profile.domainCount} websites",
+                        "${profile.appCount} apps, ${profile.domainCount} websites",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -616,7 +616,7 @@ private fun CreateProfileDialog(
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                "🛡️ Blacklist",
+                                "Blacklist",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (selectedMode == BlockMode.BLACKLIST) Color(0xFF38BDF8) else Color(0xFFF1F5F9)
                             )
@@ -637,7 +637,7 @@ private fun CreateProfileDialog(
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                "🔒 Whitelist",
+                                "Whitelist",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (selectedMode == BlockMode.WHITELIST) Color(0xFF818CF8) else Color(0xFFF1F5F9)
                             )

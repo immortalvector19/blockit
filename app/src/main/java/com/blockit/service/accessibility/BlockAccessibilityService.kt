@@ -22,7 +22,9 @@ class BlockAccessibilityService : AccessibilityService() {
     private lateinit var overlayController: OverlayController
     private lateinit var appScope: CoroutineScope
     private lateinit var intentPassManager: com.blockit.core.intentgate.IntentPassManager
+    private lateinit var systemAppResolver: com.blockit.core.system.SystemAppResolver
     private var homePackages: Set<String> = emptySet()
+    private val lastLoggedBlockTime = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -31,6 +33,7 @@ class BlockAccessibilityService : AccessibilityService() {
         overlayController = OverlayController(this)
         appScope = container.applicationScope
         intentPassManager = container.intentPassManager
+        systemAppResolver = container.systemAppResolver
 
         com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(true)
         com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = {
@@ -131,17 +134,15 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Ignore essential system framework and UI components.
-        // Critical: events from "android" (window compositor), SystemUI, Google Play Services, keyboards,
-        // or permission dialogs must NEVER be evaluated as regular apps and must NEVER dismiss the overlay!
-        if (pkgName == "android" ||
-            pkgName == "com.android.systemui" ||
-            pkgName == "com.google.android.gms" ||
-            pkgName == "com.android.permissioncontroller" ||
-            pkgName == "com.google.android.packageinstaller" ||
-            pkgName.contains("inputmethod", ignoreCase = true) ||
-            pkgName.contains("keyboard", ignoreCase = true) ||
-            pkgName.contains("autofill", ignoreCase = true)
+        // Ignore essential system framework and UI components dynamically
+        if (::systemAppResolver.isInitialized && systemAppResolver.isAlwaysPermitted(pkgName)) {
+            return
+        }
+
+        // For app blocking, only react to window state / window transitions, not rapid scroll redraws
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
+            !BrowserUrlDetector.SUPPORTED_BROWSERS.contains(pkgName)
         ) {
             return
         }
@@ -251,9 +252,6 @@ class BlockAccessibilityService : AccessibilityService() {
             val profile = result.profileName ?: "Focus"
             val reason = result.reason ?: "App blocked"
 
-            // Eject immediately to Home to prevent interaction beneath or bypass
-            performGlobalAction(GLOBAL_ACTION_HOME)
-
             overlayController.showBlockOverlay(
                 targetIdentifier = pkgName,
                 profileName = profile,
@@ -264,6 +262,7 @@ class BlockAccessibilityService : AccessibilityService() {
                 canRequestPass = intentPassManager.canRequestPass(pkgName),
                 remainingPasses = intentPassManager.getRemainingPassesToday(),
                 onHomeClicked = {
+                    overlayController.hideBlockOverlay()
                     performGlobalAction(GLOBAL_ACTION_HOME)
                 },
                 onOpenAllowedApp = { appPkg ->
@@ -292,12 +291,19 @@ class BlockAccessibilityService : AccessibilityService() {
     }
 
     private fun logBlockEvent(identifier: String, type: TargetType, profile: String) {
+        val now = System.currentTimeMillis()
+        val last = lastLoggedBlockTime[identifier] ?: 0L
+        if (now - last < 4000L) {
+            return
+        }
+        lastLoggedBlockTime[identifier] = now
+
         appScope.launch(Dispatchers.IO) {
             try {
                 val container = BlockItApplication.from(this@BlockAccessibilityService)
                 container.database.blockEventDao().insertEvent(
                     BlockEventEntity(
-                        timestamp = System.currentTimeMillis(),
+                        timestamp = now,
                         targetType = type.name,
                         identifier = identifier,
                         profileName = profile

@@ -29,6 +29,8 @@ class UsageInsightsRepository(
         val startOfDay = TimeSavedCalculator.getStartOfDayTimestamp(now)
         val startOfWeek = TimeSavedCalculator.getStartOfWeekTimestamp(now)
 
+        val oneYearAgo = now - (365L * 24 * 60 * 60 * 1000L)
+
         val sessionsFlow: Flow<List<FocusSessionEntity>> = focusSessionDao?.observeAllSessions() ?: flowOf(emptyList())
 
         val countsFlow = combine(
@@ -39,10 +41,10 @@ class UsageInsightsRepository(
 
         return combine(
             countsFlow,
-            blockEventDao.observeEventsSince(startOfWeek),
+            blockEventDao.observeEventsSince(oneYearAgo),
             blockEventDao.observeTopBlockedTargets(10),
             sessionsFlow
-        ) { counts, weekEvents, topTargets, sessions ->
+        ) { counts, yearEvents, topTargets, sessions ->
             val total = counts.first
             val today = counts.second
             val week = counts.third
@@ -55,7 +57,7 @@ class UsageInsightsRepository(
             val formattedFocusTime = TimeSavedCalculator.formatMinutes(totalFocusMinutes)
 
             // Calculate real 7-day daily histogram
-            val dailyStats = computeDailyStats(weekEvents, now)
+            val dailyStats = computeDailyStats(yearEvents, now)
 
             val minutesSaved = TimeSavedCalculator.calculateMinutesSaved(total)
             val formattedTime = TimeSavedCalculator.formatTimeSaved(minutesSaved)
@@ -84,7 +86,7 @@ class UsageInsightsRepository(
                 formattedTimeSaved = formattedTime,
                 dailyStats = dailyStats,
                 topTargets = resolvedTopTargets,
-                recentEvents = weekEvents.takeLast(50).reversed()
+                recentEvents = yearEvents.reversed()
             )
         }
     }

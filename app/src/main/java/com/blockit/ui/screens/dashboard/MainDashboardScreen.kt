@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -52,15 +53,31 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -68,6 +85,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -99,6 +120,7 @@ import com.blockit.domain.model.BlockedDomain
 import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.Profile
 import com.blockit.domain.model.Schedule
+import com.blockit.domain.model.SessionStrictness
 import com.blockit.domain.model.TimeSavedCalculator
 import com.blockit.domain.model.UsageInsightsData
 import com.blockit.ui.components.BlockDigitalClock
@@ -113,7 +135,10 @@ import com.blockit.ui.theme.CreamSurface
 import com.blockit.ui.theme.CreamSurfaceVariant
 import com.blockit.ui.theme.CreamText
 import com.blockit.ui.theme.CreamTextMuted
+import com.blockit.ui.theme.SignalGreen
+import com.blockit.ui.theme.DestructiveRed
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -123,10 +148,20 @@ fun MainDashboardScreen(
     viewModel: MainDashboardViewModel,
     onAddAppsClick: (Long) -> Unit,
     onOpenSettingsClick: () -> Unit,
+    onOpenStrictModeClick: () -> Unit = onOpenSettingsClick,
+    onOpenHealthClick: () -> Unit = onOpenSettingsClick,
+    onOpenSetupGuideClick: () -> Unit = onOpenSettingsClick,
+    onOpenBackupRestoreClick: () -> Unit = onOpenSettingsClick,
+    onOpenHowItWorksClick: () -> Unit = onOpenSettingsClick,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Timer, 1: Bags, 2: Routines, 3: Statistics
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Timer, 1: Profiles, 2: Routines, 3: Statistics
+
+    var showHelpDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
 
     val profiles by viewModel.profiles.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
@@ -142,6 +177,7 @@ fun MainDashboardScreen(
     var pendingDescription by remember { mutableStateOf("") }
     var showStopConfirmDialog by remember { mutableStateOf(false) }
     var pendingStopSessionId by remember { mutableStateOf<Long?>(null) }
+    var activeSessionStrictness by rememberSaveable { mutableStateOf(SessionStrictness.NORMAL) }
 
     // Live permission check
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
@@ -170,37 +206,199 @@ fun MainDashboardScreen(
     val activeProfile = profiles.find { it.id == activeSession?.profileId }
     val colors = BlockitTheme.colors
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = colors.background,
-        topBar = {
-            DashboardTopBar(
-                activeSession = activeSession,
-                activeProfileName = activeProfile?.name,
-                isProtected = isProtected,
-                isDark = colors.isDark,
-                onToggleDarkMode = { viewModel.toggleDarkMode() },
-                onStatusClick = {
-                    if (!isAccessibilityEnabled) {
-                        com.blockit.core.permission.PermissionIntents.openAccessibilitySettings(context)
-                    } else if (!isOverlayEnabled) {
-                        com.blockit.core.permission.PermissionIntents.openOverlaySettings(context)
-                    } else if (!isBatteryIgnored) {
-                        com.blockit.core.permission.PermissionIntents.requestBatteryExemption(context)
-                    } else {
-                        onOpenSettingsClick()
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = colors.surface,
+                drawerContentColor = colors.textPrimary,
+                modifier = Modifier.width(310.dp)
+            ) {
+                // Header
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 22.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "FocusShield",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = (-0.5).sp
+                            ),
+                            color = colors.textPrimary
+                        )
                     }
-                },
-                onSettingsClick = onOpenSettingsClick
-            )
-        },
-        bottomBar = {
-            DashboardBottomBar(
-                selectedTab = selectedTab,
-                onTabSelect = { selectedTab = it }
-            )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "100% On-Device Focus",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textMuted
+                    )
+                }
+
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                NavigationDrawerItem(
+                    label = { Text("Settings", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenSettingsClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Strict Mode", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenStrictModeClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Engine Health", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenHealthClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Permissions Guide", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.Shield, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenSetupGuideClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Backup & Restore", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenBackupRestoreClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("How Blocking Works", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.Info, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenHowItWorksClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Dark Theme Quick Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (colors.isDark) Icons.Default.DarkMode else Icons.Default.LightMode,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Dark Mode",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
+                        )
+                    }
+                    Switch(
+                        checked = colors.isDark,
+                        onCheckedChange = { viewModel.toggleDarkMode() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = colors.primary
+                        )
+                    )
+                }
+
+                NavigationDrawerItem(
+                    label = { Text("Help & Support", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.Help, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showHelpDialog = true
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("About FocusShield", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.Shield, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showAboutDialog = true
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+            }
         }
-    ) { padding ->
+    ) {
+        Scaffold(
+            modifier = modifier.fillMaxSize(),
+            containerColor = colors.background,
+            topBar = {
+                DashboardTopBar(
+                    activeSession = activeSession,
+                    activeProfileName = activeProfile?.name,
+                    onMenuClick = { scope.launch { drawerState.open() } }
+                )
+            },
+            bottomBar = {
+                DashboardBottomBar(
+                    selectedTab = selectedTab,
+                    onTabSelect = { selectedTab = it }
+                )
+            }
+        ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -212,11 +410,12 @@ fun MainDashboardScreen(
                 label = "dashboard_tab"
             ) { tab ->
                 when (tab) {
-                    0 -> TimerTabContent(
+                    0 -> DashboardHomeContent(
                         profiles = profiles,
                         activeSession = activeSession,
                         selectedProfileId = selectedProfileId,
                         isProtected = isProtected,
+                        insightsData = insightsData,
                         onFixPermissions = {
                             if (!isAccessibilityEnabled) {
                                 com.blockit.core.permission.PermissionIntents.openAccessibilitySettings(context)
@@ -227,18 +426,19 @@ fun MainDashboardScreen(
                             }
                         },
                         onSelectProfile = { viewModel.selectProfile(it) },
-                        onStartSession = { profId, mins -> viewModel.startSession(profId, mins) },
-                        onEndSession = { sessId ->
-                            val hasPinLock = strictConfig.unlockPin.isNotBlank() && strictConfig.requirePinToStopSession
-                            if (strictConfig.isEnabled || hasPinLock) {
-                                pendingDescription = "stop the ongoing focus session early"
-                                pendingAction = { viewModel.endSession(sessId) }
-                            } else {
-                                showStopConfirmDialog = true
-                                pendingStopSessionId = sessId
-                            }
+                        onStartSession = { profId, mins, strictness ->
+                            activeSessionStrictness = strictness
+                            viewModel.startSession(profId, mins)
                         },
-                        onNavigateToProfiles = { selectedTab = 1 }
+                        onEndSession = { sessId ->
+                            pendingStopSessionId = sessId
+                            showStopConfirmDialog = true
+                        },
+                        onDuplicateProfile = { profId -> viewModel.duplicateProfile(profId) },
+                        onCreateTemplateProfile = { type -> viewModel.createTemplateProfile(type) },
+                        onNavigateToProfiles = { selectedTab = 1 },
+                        onNavigateToStats = { selectedTab = 3 },
+                        onCreateProfileClick = { selectedTab = 1 }
                     )
                     1 -> ProfilesTabContent(
                         profiles = profiles,
@@ -309,6 +509,8 @@ fun MainDashboardScreen(
 
             if (showStopConfirmDialog && pendingStopSessionId != null) {
                 StopSessionFrictionDialog(
+                    strictness = activeSessionStrictness,
+                    endTimeMs = activeSession?.endTimestamp,
                     onDismiss = {
                         showStopConfirmDialog = false
                         pendingStopSessionId = null
@@ -325,13 +527,163 @@ fun MainDashboardScreen(
     }
 }
 
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "FocusShield FAQs",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("1. How does blocking work?", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text("FocusShield detects distracting apps locally via Accessibility Service and renders a full-screen calm shield.", color = colors.textMuted, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("2. Whitelist vs Blacklist?", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text("Blacklists block selected apps. Whitelists lock down your phone except permitted apps.", color = colors.textMuted, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("3. Privacy Guarantee", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text("100% on-device. Zero network traffic, zero analytics, zero account required.", color = colors.textMuted, fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showHelpDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                ) {
+                    Text("Got it")
+                }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(18.dp)
+        )
+    }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "About FocusShield",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("FocusShield v2.0", fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                    Text(
+                        "Personal, on-device app and website blocker.\n\n" +
+                                "- 100% On-Device execution\n" +
+                                "- No network requests or telemetry\n" +
+                                "- No accounts or advertising",
+                        color = colors.textMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showAboutDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                ) {
+                    Text("Close")
+                }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(18.dp)
+        )
+    }
+}
+
 @Composable
 private fun StopSessionFrictionDialog(
+    strictness: SessionStrictness,
+    endTimeMs: Long?,
     onDismiss: () -> Unit,
     onConfirmStop: () -> Unit
 ) {
     val colors = BlockitTheme.colors
-    var secondsRemaining by remember { mutableIntStateOf(10) }
+
+    if (strictness == SessionStrictness.LOCKED) {
+        val formattedEndTime = if (endTimeMs != null) {
+            SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(endTimeMs))
+        } else "scheduled time"
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Focus Session Locked",
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "This focus session was started in Locked mode to prevent self-interruption.",
+                        color = colors.textPrimary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Early exit is disabled. Your focus block will unlock automatically at $formattedEndTime.",
+                        color = colors.textMuted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Stay Focused", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = colors.surface,
+            shape = RoundedCornerShape(18.dp)
+        )
+        return
+    }
+
+    val isStrict = strictness == SessionStrictness.STRICT
+    var secondsRemaining by remember { mutableIntStateOf(if (isStrict) 15 else 10) }
+    var typedPhrase by remember { mutableStateOf("") }
+    val requiredPhrase = "I want to break my focus"
 
     LaunchedEffect(Unit) {
         while (secondsRemaining > 0) {
@@ -340,22 +692,25 @@ private fun StopSessionFrictionDialog(
         }
     }
 
+    val canConfirm = secondsRemaining == 0 && (!isStrict || typedPhrase.trim() == requiredPhrase)
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Stop Focus Session Early?",
+                text = if (isStrict) "Strict Focus Challenge" else "Stop Focus Session Early?",
                 color = colors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Stopping early interrupts your momentum and discipline. Take a breath before deciding to abandon your focus session.",
-                    color = colors.textMuted
+                    text = "Stopping early interrupts your momentum and discipline. Take a breath before breaking your focus.",
+                    color = colors.textMuted,
+                    style = MaterialTheme.typography.bodyMedium
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+
                 if (secondsRemaining > 0) {
                     Text(
                         text = "Friction cooldown active: please reflect for $secondsRemaining seconds.",
@@ -364,9 +719,42 @@ private fun StopSessionFrictionDialog(
                     )
                 } else {
                     Text(
-                        text = "Cooldown complete. You may confirm to end your session.",
+                        text = "Cooldown complete.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textMuted
+                    )
+                }
+
+                if (isStrict) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "To confirm exit, type the exact phrase below:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    Surface(
+                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = requiredPhrase,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = colors.primary,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = typedPhrase,
+                        onValueChange = { typedPhrase = it },
+                        placeholder = { Text(requiredPhrase, fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             }
@@ -374,15 +762,21 @@ private fun StopSessionFrictionDialog(
         confirmButton = {
             Button(
                 onClick = onConfirmStop,
-                enabled = secondsRemaining == 0,
+                enabled = canConfirm,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.25f),
+                    containerColor = DestructiveRed,
+                    disabledContainerColor = DestructiveRed.copy(alpha = 0.25f),
                     disabledContentColor = Color.White.copy(alpha = 0.4f)
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text(if (secondsRemaining > 0) "Wait (${secondsRemaining}s)" else "Confirm Stop")
+                Text(
+                    text = when {
+                        secondsRemaining > 0 -> "Wait (${secondsRemaining}s)"
+                        isStrict && !canConfirm -> "Type phrase"
+                        else -> "Confirm Stop"
+                    }
+                )
             }
         },
         dismissButton = {
@@ -391,7 +785,7 @@ private fun StopSessionFrictionDialog(
             }
         },
         containerColor = colors.surface,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(18.dp)
     )
 }
 
@@ -399,123 +793,83 @@ private fun StopSessionFrictionDialog(
 private fun DashboardTopBar(
     activeSession: FocusSession?,
     activeProfileName: String?,
-    isProtected: Boolean,
-    isDark: Boolean,
-    onToggleDarkMode: () -> Unit,
-    onStatusClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onMenuClick: () -> Unit
 ) {
     val colors = BlockitTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left Status Pill
-        val pillBg = when {
-            activeSession != null -> if (colors.isDark) Color(0xFF14532D).copy(alpha = 0.4f) else Color(0xFFDCFCE7)
-            isProtected -> if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9)
-            else -> if (colors.isDark) Color(0xFF451A1A) else Color(0xFFFFE4E6)
-        }
-        val pillBorder = when {
-            activeSession != null -> if (colors.isDark) Color(0xFF16A34A) else Color(0xFF86EFAC)
-            isProtected -> colors.border
-            else -> if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFDA4AF)
-        }
-        val dotColor = when {
-            activeSession != null -> Color(0xFF22C55E) // Signal Green
-            isProtected -> Color(0xFF10B981) // Ready Green
-            else -> Color(0xFFEF4444) // Warning Red
-        }
-        val pillText = when {
-            activeSession != null -> if (!activeProfileName.isNullOrBlank()) "Active: $activeProfileName" else "Active"
-            isProtected -> "Ready"
-            else -> "Action Req."
-        }
-
-        Surface(
-            onClick = onStatusClick,
-            shape = RoundedCornerShape(20.dp),
-            color = pillBg,
-            border = androidx.compose.foundation.BorderStroke(1.dp, pillBorder)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(dotColor)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = pillText,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        // Center Brand Identity
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Shield,
-                contentDescription = null,
-                tint = colors.primary,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "FocusShield",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 22.sp,
-                    letterSpacing = (-0.5).sp
-                ),
-                color = colors.textPrimary
-            )
-        }
-
-        // Right Actions: Dark Mode Quick Toggle + Settings Button
+        // Left: Hamburger Menu Button + Logo & Title
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             IconButton(
-                onClick = onToggleDarkMode,
+                onClick = onMenuClick,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(colors.surface)
             ) {
                 Icon(
-                    imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
-                    contentDescription = if (isDark) "Switch to Light Mode" else "Switch to Dark Mode",
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Open Navigation Drawer",
                     tint = colors.textPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
-            IconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(20.dp)
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "FocusShield",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        letterSpacing = (-0.5).sp
+                    ),
+                    color = colors.textPrimary
+                )
+            }
+        }
+
+        // Right: Active session pulse indicator
+        if (activeSession != null) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (colors.isDark) Color(0xFF14532D).copy(alpha = 0.4f) else Color(0xFFDCFCE7),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF16A34A) else Color(0xFF86EFAC))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(SignalGreen)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (!activeProfileName.isNullOrBlank()) "Active: $activeProfileName" else "Active",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -543,30 +897,39 @@ private fun DashboardBottomBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val tabs = listOf(
-                Icons.Default.Timer to "Timer",
+                Icons.Default.Timer to "Home",
                 Icons.Default.Shield to "Profiles",
-                Icons.Default.Schedule to "Routines",
-                Icons.Default.BarChart to "Insights"
+                Icons.Default.Schedule to "Schedules",
+                Icons.Default.BarChart to "Stats"
             )
 
             tabs.forEachIndexed { index, (icon, label) ->
                 val isSelected = selectedTab == index
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent
-                        )
-                        .clickable { onTabSelect(index) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    onClick = { onTabSelect(index) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent,
+                    modifier = Modifier.padding(horizontal = 2.dp)
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        tint = if (isSelected) colors.primary else colors.textMuted,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = label,
+                            tint = if (isSelected) colors.primary else colors.textMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -574,26 +937,30 @@ private fun DashboardBottomBar(
 }
 
 // -------------------------------------------------------------
-// TAB 1: TIMER TAB (Matching video frame 00:16)
+// TAB 1: DASHBOARD HOME (Phase 2 New Structure)
 // -------------------------------------------------------------
 @Composable
-private fun TimerTabContent(
+private fun DashboardHomeContent(
     profiles: List<Profile>,
     activeSession: FocusSession?,
     selectedProfileId: Long?,
     isProtected: Boolean,
+    insightsData: UsageInsightsData,
     onFixPermissions: () -> Unit,
     onSelectProfile: (Long) -> Unit,
-    onStartSession: (Long, Int) -> Unit,
+    onStartSession: (Long, Int, SessionStrictness) -> Unit,
     onEndSession: (Long) -> Unit,
-    onNavigateToProfiles: () -> Unit
+    onDuplicateProfile: (Long) -> Unit,
+    onCreateTemplateProfile: (String) -> Unit,
+    onNavigateToProfiles: () -> Unit,
+    onNavigateToStats: () -> Unit,
+    onCreateProfileClick: () -> Unit
 ) {
     val colors = BlockitTheme.colors
-    var selectedDurationMinutes by remember { mutableIntStateOf(15) }
-    var showCustomDurationDialog by remember { mutableStateOf(false) }
+    var showDurationSheet by remember { mutableStateOf(false) }
     var showProfilePickerDialog by remember { mutableStateOf(false) }
 
-    // Live remaining time countdown
+    // Live remaining time countdown for active session
     val now = System.currentTimeMillis()
     var remainingMs by remember(activeSession?.endTimestamp) {
         mutableLongStateOf(
@@ -608,352 +975,645 @@ private fun TimerTabContent(
         }
     }
 
-    val displayHours = if (activeSession != null) (remainingMs / 1000 / 3600).toInt() else selectedDurationMinutes / 60
-    val displayMins = if (activeSession != null) ((remainingMs / 1000 % 3600) / 60).toInt() else selectedDurationMinutes % 60
+    val totalSessionMs = if (activeSession != null) {
+        (activeSession.endTimestamp - activeSession.startTimestamp).coerceAtLeast(1000L)
+    } else 1L
+    val sessionProgress = if (activeSession != null) {
+        1f - (remainingMs.toFloat() / totalSessionMs.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+
+    val displayHours = if (activeSession != null) (remainingMs / 1000 / 3600).toInt() else 0
+    val displayMins = if (activeSession != null) ((remainingMs / 1000 % 3600) / 60).toInt() else 0
     val displaySecs = if (activeSession != null) (remainingMs / 1000 % 60).toInt() else 0
 
-    val targetProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
+    val targetProfile = profiles.find { it.id == (activeSession?.profileId ?: selectedProfileId) } ?: profiles.firstOrNull()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (!isProtected) {
-                Card(
-                    onClick = onFixPermissions,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (colors.isDark) Color(0xFF451A1A) else Color(0xFFFFE4E6)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFDA4AF))
+        // -------------------------------------------------------------
+        // SECTION 1: ENGINE STATUS CARD (Only shown when !isProtected)
+        // -------------------------------------------------------------
+        if (!isProtected) {
+            Card(
+                onClick = onFixPermissions,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (colors.isDark) Color(0xFF3B1515) else Color(0xFFFFF1F2)
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFECDD3)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFFE4E6)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE11D48), modifier = Modifier.size(22.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Blocking Engine Needs Setup",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
-                            )
-                            Text(
-                                text = "Tap here to grant Accessibility & Display Over Apps so FocusShield can block distractions.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
-                            )
-                        }
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFE11D48),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Blocking Engine Needs Setup",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Grant Accessibility, Overlay, and Battery Exemption to enable background protection.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onFixPermissions,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE11D48),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text("Fix", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (activeSession != null) {
-                // -------------------------------------------------------------
-                // ACTIVE FOCUS SESSION DISPLAY
-                // -------------------------------------------------------------
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f))
+        // -------------------------------------------------------------
+        // SECTION 2: ACTIVE SESSION CARD or START FOCUS CARD
+        // -------------------------------------------------------------
+        if (activeSession != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(
-                        modifier = Modifier.padding(28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(colors.primary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = colors.primary,
-                                modifier = Modifier.size(36.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.primary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "ACTIVE FOCUS SESSION",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.2.sp
+                                ),
+                                color = colors.primary
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = "FOCUS SESSION RUNNING",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 2.sp
-                            ),
-                            color = colors.primary
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val countdownText = if (displayHours > 0) {
-                            String.format("%02d:%02d:%02d", displayHours, displayMins, displaySecs)
-                        } else {
-                            String.format("%02d:%02d", displayMins, displaySecs)
+                        if (targetProfile != null) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (targetProfile.blockMode == BlockMode.WHITELIST)
+                                    colors.primary.copy(alpha = 0.15f)
+                                else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF)
+                            ) {
+                                Text(
+                                    text = if (targetProfile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                    color = if (targetProfile.blockMode == BlockMode.WHITELIST) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                         }
-
-                        Text(
-                            text = countdownText,
-                            style = MaterialTheme.typography.displayLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 56.sp,
-                                letterSpacing = (-1).sp
-                            ),
-                            color = colors.textPrimary
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val endTime = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
-                            .format(java.util.Date(activeSession.endTimestamp))
-
-                        Text(
-                            text = "Ends at $endTime • Protected by '${targetProfile?.name ?: "Focus"}'",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.textMuted
-                        )
                     }
-                }
-            } else {
-                // -------------------------------------------------------------
-                // FOCUS CONTROLLER SETUP (ORIGINAL FOCUSSHIELD DESIGN)
-                // -------------------------------------------------------------
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Circular countdown ring
+                    Box(
+                        modifier = Modifier.size(170.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "TARGET DURATION",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            ),
-                            color = colors.textMuted
+                        CircularProgressIndicator(
+                            progress = { 1f },
+                            modifier = Modifier.fillMaxSize(),
+                            color = colors.border,
+                            strokeWidth = 8.dp,
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
+                        CircularProgressIndicator(
+                            progress = { sessionProgress },
+                            modifier = Modifier.fillMaxSize(),
+                            color = colors.primary,
+                            strokeWidth = 8.dp,
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            val countdownText = if (displayHours > 0) {
+                                String.format("%02d:%02d:%02d", displayHours, displayMins, displaySecs)
+                            } else {
+                                String.format("%02d:%02d", displayMins, displaySecs)
+                            }
                             Text(
-                                text = "$selectedDurationMinutes",
-                                style = MaterialTheme.typography.displayLarge.copy(
+                                text = countdownText,
+                                style = MaterialTheme.typography.headlineLarge.copy(
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Black,
-                                    fontSize = 58.sp,
+                                    fontSize = 32.sp,
                                     letterSpacing = (-1).sp
                                 ),
                                 color = colors.textPrimary
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "MIN",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                ),
-                                color = colors.primary,
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                text = "remaining",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.textMuted
                             )
                         }
+                    }
 
-                        val targetEndCal = java.util.Calendar.getInstance().apply {
-                            add(java.util.Calendar.MINUTE, selectedDurationMinutes)
-                        }
-                        val targetEndTimeStr = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(targetEndCal.time)
+                    Spacer(modifier = Modifier.height(18.dp))
 
+                    val endTimeStr = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+                        .format(java.util.Date(activeSession.endTimestamp))
+
+                    Text(
+                        text = "Protecting with '${targetProfile?.name ?: "Focus"}' until $endTimeStr",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Stop button with friction trigger
+                    OutlinedButton(
+                        onClick = { onEndSession(activeSession.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFEF4444)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Focus until $targetEndTimeStr",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color = colors.textMuted
+                            text = "Stop Session",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                         )
+                    }
+                }
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "Quick Focus",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Block digital noise and do your best work.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted
+                    )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                        val presets = listOf(15, 25, 45, 60, 90)
+                    // Selected Profile Pill
+                    Surface(
+                        onClick = { showProfilePickerDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            presets.forEach { mins ->
-                                val isSelected = selectedDurationMinutes == mins
-                                Surface(
-                                    onClick = { selectedDurationMinutes = mins },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else Color(0xFF1E293B)) else Color.Transparent,
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        1.dp,
-                                        if (isSelected) colors.primary else colors.border
-                                    )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.primary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Shield,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier.padding(vertical = 10.dp),
-                                        contentAlignment = Alignment.Center
+                                    Text(
+                                        text = targetProfile?.name ?: "No Profile Selected",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = colors.textPrimary
+                                    )
+                                    if (targetProfile != null) {
+                                        val isWhitelist = targetProfile.blockMode == BlockMode.WHITELIST
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (isWhitelist) colors.primary.copy(alpha = 0.15f) else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF)
+                                        ) {
+                                            Text(
+                                                text = if (isWhitelist) "Whitelist" else "Blacklist",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                color = if (isWhitelist) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = when {
+                                        targetProfile == null -> "Tap to choose a profile"
+                                        targetProfile.blockMode == BlockMode.WHITELIST -> "${targetProfile.appCount} permitted apps"
+                                        else -> "${targetProfile.appCount} apps, ${targetProfile.domainCount} sites"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textMuted
+                                )
+                            }
+                            Text(
+                                text = "Change",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Primary Start Focus Button
+                    Button(
+                        onClick = {
+                            if (!isProtected) {
+                                onFixPermissions()
+                            } else if (targetProfile != null) {
+                                showDurationSheet = true
+                            } else {
+                                onCreateProfileClick()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (!isProtected) Color(0xFFE11D48) else colors.primary,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = if (!isProtected) Icons.Default.Warning else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (!isProtected) "Setup Engine to Start" else if (targetProfile == null) "Create Profile to Start" else "Choose Duration & Start",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // SECTION 3: TODAY'S STATS SUMMARY (Real Room DB data only)
+        // -------------------------------------------------------------
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Today's Activity",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    TextButton(
+                        onClick = onNavigateToStats,
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Full Stats",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val hasData = insightsData.blockedToday > 0 || insightsData.totalFocusMinutes > 0
+
+                if (!hasData) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No distraction attempts today. Start a focus session to protect your flow.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Focus Time
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = "Focus Time",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.textMuted
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = insightsData.formattedFocusTime,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = colors.textPrimary
+                                )
+                            }
+                        }
+
+                        // Blocked attempts
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = "Intercepted",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.textMuted
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${insightsData.blockedToday}",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = colors.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // SECTION 4: PROFILES OVERVIEW & TEMPLATES
+        // -------------------------------------------------------------
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Focus Profiles",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    TextButton(
+                        onClick = onNavigateToProfiles,
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Manage",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Template quick-add buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onCreateTemplateProfile("WORK") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "+ Work Hours",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { onCreateTemplateProfile("SLEEP") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "+ Sleep & Rest",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Profile items list
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    profiles.forEach { prof ->
+                        val isSelected = prof.id == targetProfile?.id
+                        Surface(
+                            onClick = {
+                                if (activeSession == null) {
+                                    onSelectProfile(prof.id)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) colors.primary.copy(alpha = 0.08f) else if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) colors.primary else colors.border
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
-                                            text = "${mins}m",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
+                                            text = prof.name,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = colors.textPrimary
+                                        )
+                                        val isWhitelist = prof.blockMode == BlockMode.WHITELIST
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (isWhitelist) colors.primary.copy(alpha = 0.15f) else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF)
+                                        ) {
+                                            Text(
+                                                text = if (isWhitelist) "Whitelist" else "Blacklist",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                color = if (isWhitelist) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        if (activeSession != null) {
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = if (colors.isDark) Color(0xFF332A15) else Color(0xFFFEF3C7)
+                                            ) {
+                                                Text(
+                                                    text = "Locked",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                    color = if (colors.isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (prof.blockMode == BlockMode.WHITELIST)
+                                            "${prof.appCount} permitted apps"
+                                        else
+                                            "${prof.appCount} apps, ${prof.domainCount} sites",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.textMuted
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { onDuplicateProfile(prof.id) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ContentCopy,
+                                            contentDescription = "Duplicate Profile",
+                                            tint = colors.textMuted,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        TextButton(onClick = { showCustomDurationDialog = true }) {
-                            Text(
-                                text = if (selectedDurationMinutes !in presets) "Custom: ${selectedDurationMinutes}m (Change)" else "+ Custom Duration",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.primary
-                            )
-                        }
                     }
                 }
             }
         }
-
-        // Clean Session Profile Card
-        Card(
-            onClick = {
-                if (activeSession == null) {
-                    showProfilePickerDialog = true
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.surface),
-            border = androidx.compose.foundation.BorderStroke(
-                width = 1.dp,
-                color = if (activeSession != null) colors.primary.copy(alpha = 0.5f) else colors.border
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (activeSession != null) colors.primary.copy(alpha = 0.15f)
-                            else if (colors.isDark) colors.surfaceVariant else Color(0xFFE2E8F0)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (activeSession != null) Icons.Default.Lock else Icons.Default.Shield,
-                        contentDescription = null,
-                        tint = if (activeSession != null) colors.primary else colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = if (activeSession != null) "Locking: ${targetProfile?.name ?: "Focus"}" else (targetProfile?.name ?: "No Profile Selected"),
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = colors.textPrimary
-                        )
-                        if (targetProfile != null) {
-                            val isWhitelist = targetProfile.blockMode == BlockMode.WHITELIST
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isWhitelist) colors.primary.copy(alpha = 0.15f) else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF),
-                            ) {
-                                Text(
-                                    text = if (isWhitelist) "Whitelist" else "Blacklist",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
-                                    color = if (isWhitelist) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = when {
-                            targetProfile == null -> "Tap to create or choose a profile"
-                            targetProfile.blockMode == BlockMode.WHITELIST -> "${targetProfile.appCount} permitted apps • All other apps locked"
-                            else -> "${targetProfile.appCount} apps & ${targetProfile.domainCount} sites blocked"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
-                    )
-                }
-
-                if (activeSession == null) {
-                    Surface(
-                        onClick = { showProfilePickerDialog = true },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                    ) {
-                        Text(
-                            text = "Change",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = colors.primary,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Slide to Start / Slide to Stop
-        val targetId = targetProfile?.id
-        SlideToActButton(
-            text = when {
-                activeSession != null -> "Slide to Stop"
-                targetId == null -> "Create Profile to Start"
-                else -> "Slide to Start"
-            },
-            isActive = activeSession != null,
-            onTrigger = {
-                if (activeSession != null) {
-                    onEndSession(activeSession.id)
-                } else if (targetId != null) {
-                    onStartSession(targetId, selectedDurationMinutes)
-                } else {
-                    onNavigateToProfiles()
-                }
-            }
-        )
     }
 
+    // Profile Picker Dialog
     if (showProfilePickerDialog) {
         AlertDialog(
             onDismissRequest = { showProfilePickerDialog = false },
@@ -993,9 +1653,9 @@ private fun TimerTabContent(
                                         )
                                         Text(
                                             text = if (prof.blockMode == BlockMode.WHITELIST)
-                                                "Whitelist • ${prof.appCount} allowed apps"
+                                                "Whitelist: ${prof.appCount} allowed apps"
                                             else
-                                                "Blacklist • ${prof.appCount} apps, ${prof.domainCount} sites",
+                                                "Blacklist: ${prof.appCount} apps, ${prof.domainCount} sites",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = colors.textMuted
                                         )
@@ -1027,72 +1687,264 @@ private fun TimerTabContent(
         )
     }
 
-    if (showCustomDurationDialog) {
-        var inputMinutes by remember { mutableStateOf("25") }
-        AlertDialog(
-            onDismissRequest = { showCustomDurationDialog = false },
-            title = { Text("Set Custom Duration", color = colors.textPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = inputMinutes,
-                    onValueChange = { inputMinutes = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Minutes (1 - 720)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val parsed = inputMinutes.toIntOrNull()?.coerceIn(1, 720) ?: 25
-                    selectedDurationMinutes = parsed
-                    showCustomDurationDialog = false
-                }) {
-                    Text("Set", color = colors.primary, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCustomDurationDialog = false }) {
-                    Text("Cancel", color = colors.textMuted)
-                }
-            },
-            containerColor = colors.surface,
-            shape = RoundedCornerShape(16.dp)
+    // Duration Bottom Sheet
+    if (showDurationSheet) {
+        DurationBottomSheet(
+            targetProfile = targetProfile,
+            onDismiss = { showDurationSheet = false },
+            onStart = { profId, mins, strictness ->
+                showDurationSheet = false
+                onStartSession(profId, mins, strictness)
+            }
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DurationTile(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun DurationBottomSheet(
+    targetProfile: Profile?,
+    onDismiss: () -> Unit,
+    onStart: (Long, Int, SessionStrictness) -> Unit
 ) {
     val colors = BlockitTheme.colors
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(84.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isSelected) colors.primary else colors.border
-        )
+    var selectedMinutes by remember { mutableIntStateOf(25) }
+    var selectedStrictness by remember { mutableStateOf(SessionStrictness.NORMAL) }
+    var customHoursText by remember { mutableStateOf("0") }
+    var customMinsText by remember { mutableStateOf("25") }
+    var isCustomMode by remember { mutableStateOf(false) }
+
+    val presets = listOf(15, 25, 45, 60, 90)
+
+    val targetEndCal = Calendar.getInstance().apply {
+        add(Calendar.MINUTE, selectedMinutes)
+    }
+    val targetEndTimeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(targetEndCal.time)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(colors.border)
+            )
+        }
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(10.dp),
-            contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    lineHeight = 18.sp
-                ),
-                color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary,
-                textAlign = TextAlign.Center
+                text = "Start Focus Session",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary
             )
+
+            // Target Profile Pill
+            if (targetProfile != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Profile: ${targetProfile.name}",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = if (targetProfile.blockMode == BlockMode.WHITELIST) "Whitelist Mode (${targetProfile.appCount} permitted)" else "Blacklist Mode (${targetProfile.appCount} blocked)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.textMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Duration Presets
+            Text(
+                text = "Duration",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                presets.forEach { mins ->
+                    val isSelected = !isCustomMode && selectedMinutes == mins
+                    Surface(
+                        onClick = {
+                            isCustomMode = false
+                            selectedMinutes = mins
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSelected) colors.primary else if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border)
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${mins}m",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isSelected) Color.White else colors.textPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Custom Time Toggle / Input
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { isCustomMode = !isCustomMode }) {
+                    Text(
+                        text = if (isCustomMode) "Use Presets" else "+ Custom Duration",
+                        color = colors.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Text(
+                    text = "Ends at $targetEndTimeStr",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textMuted
+                )
+            }
+
+            if (isCustomMode) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = customHoursText,
+                        onValueChange = {
+                            if (it.length <= 2 && it.all { c -> c.isDigit() }) {
+                                customHoursText = it
+                                val h = it.toIntOrNull() ?: 0
+                                val m = customMinsText.toIntOrNull() ?: 0
+                                selectedMinutes = (h * 60 + m).coerceIn(1, 720)
+                            }
+                        },
+                        label = { Text("Hours") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = customMinsText,
+                        onValueChange = {
+                            if (it.length <= 2 && it.all { c -> c.isDigit() }) {
+                                customMinsText = it
+                                val h = customHoursText.toIntOrNull() ?: 0
+                                val m = it.toIntOrNull() ?: 0
+                                selectedMinutes = (h * 60 + m).coerceIn(1, 720)
+                            }
+                        },
+                        label = { Text("Mins") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+            }
+
+            // Strictness Selection
+            Text(
+                text = "Session Strictness",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    Triple(SessionStrictness.NORMAL, "Normal", "Stop anytime with brief 10s reflection"),
+                    Triple(SessionStrictness.STRICT, "Strict", "15s cooldown + type phrase to unlock"),
+                    Triple(SessionStrictness.LOCKED, "Locked", "Cannot stop session early until timer expires")
+                ).forEach { (level, title, desc) ->
+                    val isSelected = selectedStrictness == level
+                    Surface(
+                        onClick = { selectedStrictness = level },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC)) else Color.Transparent,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary
+                                )
+                                Text(
+                                    text = desc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textMuted
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Big Start Button
+            Button(
+                onClick = {
+                    if (targetProfile != null) {
+                        onStart(targetProfile.id, selectedMinutes, selectedStrictness)
+                    }
+                },
+                enabled = targetProfile != null,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Text(
+                    text = "Start ${selectedMinutes}-Minute Focus",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
         }
     }
 }
@@ -1346,9 +2198,9 @@ private fun ProfilesTabContent(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = if (currentProfile.blockMode == BlockMode.WHITELIST)
-                                "Whitelist Mode (Kiosk) — Only apps and domains listed below can run. All other apps on your phone are locked out."
+                                "Whitelist Mode (Kiosk) - Only apps and domains listed below can run. All other apps on your phone are locked out."
                             else
-                                "Blacklist Mode — Apps and domains listed below will be blocked. The rest of your phone stays completely accessible.",
+                                "Blacklist Mode - Apps and domains listed below will be blocked. The rest of your phone stays completely accessible.",
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.textMuted
                         )
@@ -1369,7 +2221,7 @@ private fun ProfilesTabContent(
                             ) {
                                 Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = "🔒 Whitelist",
+                                        text = "Whitelist",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                         color = if (currentProfile.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
                                     )
@@ -1384,7 +2236,7 @@ private fun ProfilesTabContent(
                             ) {
                                 Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = "🛡️ Blacklist",
+                                        text = "Blacklist",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                         color = if (currentProfile.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
                                     )
@@ -1567,7 +2419,7 @@ private fun ProfilesTabContent(
                             border = androidx.compose.foundation.BorderStroke(1.dp, if (profileMode == BlockMode.WHITELIST) colors.primary else colors.border),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("🔒 Whitelist", color = if (profileMode == BlockMode.WHITELIST) Color.White else colors.textPrimary)
+                            Text("Whitelist", color = if (profileMode == BlockMode.WHITELIST) Color.White else colors.textPrimary)
                         }
                         Button(
                             onClick = { profileMode = BlockMode.BLACKLIST },
@@ -1577,7 +2429,7 @@ private fun ProfilesTabContent(
                             border = androidx.compose.foundation.BorderStroke(1.dp, if (profileMode == BlockMode.BLACKLIST) colors.primary else colors.border),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("🛡️ Blacklist", color = if (profileMode == BlockMode.BLACKLIST) Color.White else colors.textPrimary)
+                            Text("Blacklist", color = if (profileMode == BlockMode.BLACKLIST) Color.White else colors.textPrimary)
                         }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
@@ -1683,7 +2535,17 @@ private fun RoutinesTabContent(
     onNavigateToProfiles: () -> Unit
 ) {
     val colors = BlockitTheme.colors
-    val currentBag = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
+    val currentProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    val presets = remember {
+        listOf(
+            RoutinePresetItem("Workday", "09:00 - 17:00 (M-F)", 31, 540, 1020),
+            RoutinePresetItem("Deep Work", "08:00 - 12:00 (M-F)", 31, 480, 720),
+            RoutinePresetItem("Evening", "20:30 - 23:30 (Daily)", 127, 1230, 1410),
+            RoutinePresetItem("Weekend", "10:00 - 18:00 (S-S)", 96, 600, 1080)
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -1691,7 +2553,7 @@ private fun RoutinesTabContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
-        // Timeline Header: 00:00 - 24:00 with pixel dots matching video frame 00:26
+        // Timeline Header: 00:00 - 24:00
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1742,7 +2604,7 @@ private fun RoutinesTabContent(
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 items(profiles) { profile ->
-                    val isSelected = profile.id == currentBag?.id
+                    val isSelected = profile.id == currentProfile?.id
                     Surface(
                         onClick = { onSelectProfile(profile.id) },
                         shape = RoundedCornerShape(12.dp),
@@ -1760,18 +2622,90 @@ private fun RoutinesTabContent(
             }
         }
 
-        Text(
-            text = "Control center",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = colors.textPrimary
-        )
-        Text(
-            text = "Routines start a block on their own, at the time you set, on the days you pick.",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.textMuted
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Control Center",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "Automated schedules engage focus locks without manual intervention.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textMuted
+                )
+            }
+            if (profiles.isNotEmpty()) {
+                IconButton(
+                    onClick = { showCreateDialog = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (colors.isDark) colors.surfaceVariant else CharcoalDark)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add Routine",
+                        tint = if (colors.isDark) colors.primary else Color.White
+                    )
+                }
+            }
+        }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Quick Smart Presets
+        if (profiles.isNotEmpty()) {
+            Text(
+                text = "Quick Presets",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(presets) { preset ->
+                    Surface(
+                        onClick = {
+                            if (currentProfile != null) {
+                                onSaveSchedule(
+                                    Schedule(
+                                        profileId = currentProfile.id,
+                                        daysOfWeekMask = preset.daysMask,
+                                        startMinuteOfDay = preset.startMinute,
+                                        endMinuteOfDay = preset.endMinute,
+                                        isEnabled = true
+                                    )
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        color = colors.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text(
+                                text = "+ ${preset.name}",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                            Text(
+                                text = preset.timeRangeText,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = colors.textMuted
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+        }
 
         if (profiles.isEmpty()) {
             Card(
@@ -1785,13 +2719,13 @@ private fun RoutinesTabContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "No Profiles Created Yet",
+                        "No Focus Profiles Available",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Create a focus profile first before creating automated routines.",
+                        "Create a focus profile first before setting up automated routines.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textMuted,
                         textAlign = TextAlign.Center
@@ -1823,41 +2757,26 @@ private fun RoutinesTabContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "No automated routines active.",
+                        "No automated routines active",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Add a schedule to lock distractions automatically (e.g. 09:00 - 17:00 Mon-Fri).",
+                        "Add a schedule to lock distractions automatically during your work or study hours.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textMuted,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = {
-                            if (currentBag != null) {
-                                onSaveSchedule(
-                                    Schedule(
-                                        profileId = currentBag.id,
-                                        daysOfWeekMask = 31, // Mon-Fri
-                                        startMinuteOfDay = 540, // 09:00
-                                        endMinuteOfDay = 1020, // 17:00
-                                        isEnabled = true
-                                    )
-                                )
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            "Add Workday Routine (9am - 5pm)",
-                            color = if (colors.isDark) colors.primary else Color.White
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { showCreateDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("+ Custom Routine", color = Color.White)
+                        }
                     }
                 }
             }
@@ -1876,9 +2795,255 @@ private fun RoutinesTabContent(
                         }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Button(
+                    onClick = { showCreateDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("+ Add Another Routine", color = if (colors.isDark) colors.primary else Color.White)
+                }
             }
         }
     }
+
+    if (showCreateDialog) {
+        CreateRoutineDialog(
+            profiles = profiles,
+            initialProfileId = currentProfile?.id,
+            onDismiss = { showCreateDialog = false },
+            onSaveSchedule = { newSchedule ->
+                onSaveSchedule(newSchedule)
+                showCreateDialog = false
+            }
+        )
+    }
+}
+
+private data class RoutinePresetItem(
+    val name: String,
+    val timeRangeText: String,
+    val daysMask: Int,
+    val startMinute: Int,
+    val endMinute: Int
+)
+
+@Composable
+private fun CreateRoutineDialog(
+    profiles: List<Profile>,
+    initialProfileId: Long?,
+    onDismiss: () -> Unit,
+    onSaveSchedule: (Schedule) -> Unit
+) {
+    val colors = BlockitTheme.colors
+    var selectedProfileId by remember { mutableStateOf(initialProfileId ?: profiles.firstOrNull()?.id ?: 0L) }
+    var startHourText by remember { mutableStateOf("09") }
+    var startMinText by remember { mutableStateOf("00") }
+    var endHourText by remember { mutableStateOf("17") }
+    var endMinText by remember { mutableStateOf("00") }
+    var daysMask by remember { mutableIntStateOf(31) } // Mon-Fri default (bits 0..4)
+
+    val dayNames = listOf("M", "T", "W", "T", "F", "S", "S")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Create Automated Routine",
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // Profile selection
+                if (profiles.size > 1) {
+                    Text(
+                        "Target Profile:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(profiles) { profile ->
+                            val isSelected = profile.id == selectedProfileId
+                            Surface(
+                                onClick = { selectedProfileId = profile.id },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) colors.primary else colors.surface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                            ) {
+                                Text(
+                                    profile.name,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSelected) Color.White else colors.textPrimary
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+
+                // Time Pickers
+                Text(
+                    "Hours (24-Hour Format):",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Start Time", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = startHourText,
+                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) startHourText = it },
+                                modifier = Modifier.width(56.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                singleLine = true
+                            )
+                            Text(" : ", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                            OutlinedTextField(
+                                value = startMinText,
+                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) startMinText = it },
+                                modifier = Modifier.width(56.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                singleLine = true
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("End Time", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = endHourText,
+                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) endHourText = it },
+                                modifier = Modifier.width(56.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                singleLine = true
+                            )
+                            Text(" : ", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                            OutlinedTextField(
+                                value = endMinText,
+                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) endMinText = it },
+                                modifier = Modifier.width(56.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Days Selection (Mon to Sun)
+                Text(
+                    "Repeat On:",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    dayNames.forEachIndexed { dIndex, name ->
+                        val bit = 1 shl dIndex
+                        val isDayActive = (daysMask and bit) != 0
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isDayActive) colors.primary
+                                    else (if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC))
+                                )
+                                .clickable { daysMask = daysMask xor bit },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isDayActive) Color.White else colors.textPrimary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TextButton(onClick = { daysMask = 31 }, modifier = Modifier.weight(1f)) {
+                        Text("Mon-Fri", style = MaterialTheme.typography.labelSmall, color = colors.primary)
+                    }
+                    TextButton(onClick = { daysMask = 96 }, modifier = Modifier.weight(1f)) {
+                        Text("Weekends", style = MaterialTheme.typography.labelSmall, color = colors.primary)
+                    }
+                    TextButton(onClick = { daysMask = 127 }, modifier = Modifier.weight(1f)) {
+                        Text("Everyday", style = MaterialTheme.typography.labelSmall, color = colors.primary)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val sH = (startHourText.toIntOrNull() ?: 9).coerceIn(0, 23)
+                    val sM = (startMinText.toIntOrNull() ?: 0).coerceIn(0, 59)
+                    val eH = (endHourText.toIntOrNull() ?: 17).coerceIn(0, 23)
+                    val eM = (endMinText.toIntOrNull() ?: 0).coerceIn(0, 59)
+                    if (selectedProfileId > 0 && daysMask > 0) {
+                        onSaveSchedule(
+                            Schedule(
+                                profileId = selectedProfileId,
+                                daysOfWeekMask = daysMask,
+                                startMinuteOfDay = sH * 60 + sM,
+                                endMinuteOfDay = eH * 60 + eM,
+                                isEnabled = true
+                            )
+                        )
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Save Routine", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = colors.textMuted)
+            }
+        },
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable
@@ -1928,14 +3093,14 @@ private fun RoutineCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Time range display: e.g. 09:00 — 17:00
+            // Time range display: e.g. 09:00 to 17:00
             val startH = schedule.startMinuteOfDay / 60
             val startM = schedule.startMinuteOfDay % 60
             val endH = schedule.endMinuteOfDay / 60
             val endM = schedule.endMinuteOfDay % 60
 
             Text(
-                text = String.format("%02d:%02d — %02d:%02d", startH, startM, endH, endM),
+                text = String.format("%02d:%02d to %02d:%02d", startH, startM, endH, endM),
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Black,
@@ -1946,8 +3111,8 @@ private fun RoutineCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Days of Week Chips matching video frame 00:26
-            val days = listOf("S", "M", "T", "W", "T", "F", "S")
+            // Days of Week Chips (Mon..Sun mapping to ISO bits 0..6)
+            val days = listOf("M", "T", "W", "T", "F", "S", "S")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -2063,6 +3228,67 @@ private fun StatisticsTabContent(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
+                val (activitySubtitle, activityBars) = remember(selectedFilter, insightsData.recentEvents) {
+                    val now = System.currentTimeMillis()
+                    val events = insightsData.recentEvents
+                    when (selectedFilter) {
+                        0 -> { // Week (past 7 days)
+                            val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+                            val bars = (6 downTo 0).map { i ->
+                                val dayCal = Calendar.getInstance().apply {
+                                    timeInMillis = now - (i * 24 * 60 * 60 * 1000L)
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }
+                                val start: Long = dayCal.timeInMillis
+                                val end: Long = start + (24 * 60 * 60 * 1000L)
+                                val count = events.count { it.timestamp in start until end }
+                                ActivityBarData(dayFormat.format(Date(start)).uppercase(), count, i == 0)
+                            }
+                            Pair("Real logged intercepts across the past 7 days.", bars)
+                        }
+                        1 -> { // Month (past 4 weeks)
+                            val bars = (3 downTo 0).map { i ->
+                                val start: Long = now - ((i + 1) * 7L * 24 * 60 * 60 * 1000L)
+                                val end: Long = now - (i * 7L * 24 * 60 * 60 * 1000L)
+                                val count = events.count { it.timestamp in start until end }
+                                ActivityBarData("W${4 - i}", count, i == 0)
+                            }
+                            Pair("Real logged intercepts grouped by week (past 4 weeks).", bars)
+                        }
+                        else -> { // Year (past 6 months)
+                            val monthFormat = SimpleDateFormat("MMM", Locale.getDefault())
+                            val bars = (5 downTo 0).map { i ->
+                                val mCal = Calendar.getInstance().apply {
+                                    timeInMillis = now
+                                    add(Calendar.MONTH, -i)
+                                    set(Calendar.DAY_OF_MONTH, 1)
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }
+                                val start: Long = mCal.timeInMillis
+                                val endCal = Calendar.getInstance().apply {
+                                    timeInMillis = start
+                                    add(Calendar.MONTH, 1)
+                                }
+                                val end: Long = endCal.timeInMillis
+                                val count = events.count { it.timestamp in start until end }
+                                ActivityBarData(monthFormat.format(Date(start)).uppercase(), count, i == 0)
+                            }
+                            Pair("Real logged intercepts across the past 6 months.", bars)
+                        }
+                    }
+                }
+
+                val maxCount = remember(activityBars) {
+                    activityBars.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
+                }
+                val maxVal = activityBars.maxOfOrNull { it.count } ?: 0
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -2073,10 +3299,9 @@ private fun StatisticsTabContent(
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = colors.textPrimary
                     )
-                    val maxVal = insightsData.dailyStats.maxOfOrNull { it.count } ?: 0
                     if (maxVal > 0) {
                         Text(
-                            text = "Peak: $maxVal/day",
+                            text = "Peak: $maxVal in period",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.SemiBold
@@ -2087,17 +3312,12 @@ private fun StatisticsTabContent(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Real logged intercepts across the past 7 days.",
+                    text = activitySubtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.textMuted
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
-
-                val stats = insightsData.dailyStats
-                val maxCount = remember(stats) {
-                    stats.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
-                }
 
                 Row(
                     modifier = Modifier
@@ -2106,30 +3326,20 @@ private fun StatisticsTabContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    val todayStart = remember {
-                        val cal = java.util.Calendar.getInstance()
-                        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                        cal.set(java.util.Calendar.MINUTE, 0)
-                        cal.set(java.util.Calendar.SECOND, 0)
-                        cal.set(java.util.Calendar.MILLISECOND, 0)
-                        cal.timeInMillis
-                    }
-
-                    if (stats.isEmpty()) {
+                    if (activityBars.all { it.count == 0 }) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No activity recorded yet",
+                                text = "No activity recorded for this period",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.textMuted
                             )
                         }
                     } else {
-                        stats.forEach { stat ->
-                            val isToday: Boolean = stat.dateMs >= todayStart
-                            val heightFraction = if (stat.count == 0) 0.05f else (stat.count.toFloat() / maxCount).coerceIn(0.12f, 1f)
+                        activityBars.forEach { bar ->
+                            val heightFraction = if (bar.count == 0) 0.05f else (bar.count.toFloat() / maxCount).coerceIn(0.12f, 1f)
 
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -2138,9 +3348,9 @@ private fun StatisticsTabContent(
                                     .weight(1f)
                                     .fillMaxHeight()
                             ) {
-                                if (stat.count > 0) {
+                                if (bar.count > 0) {
                                     Text(
-                                        text = "${stat.count}",
+                                        text = "${bar.count}",
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
@@ -2156,20 +3366,20 @@ private fun StatisticsTabContent(
                                         .fillMaxHeight(heightFraction)
                                         .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
                                         .background(
-                                            if (stat.count > 0) colors.primary
-                                            else if (isToday) colors.primary.copy(alpha = 0.35f)
+                                            if (bar.count > 0) colors.primary
+                                            else if (bar.isCurrent) colors.primary.copy(alpha = 0.35f)
                                             else if (colors.isDark) colors.surfaceVariant else CharcoalDark.copy(alpha = 0.15f)
                                         )
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = stat.dayLabel.uppercase(),
+                                    text = bar.label,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 11.sp,
-                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                        fontWeight = if (bar.isCurrent) FontWeight.Bold else FontWeight.Normal,
                                         fontFamily = FontFamily.Monospace
                                     ),
-                                    color = if (isToday) colors.primary else colors.textMuted
+                                    color = if (bar.isCurrent) colors.primary else colors.textMuted
                                 )
                             }
                         }
@@ -2371,3 +3581,9 @@ private fun AppIconView(packageName: String, modifier: Modifier = Modifier) {
         }
     }
 }
+
+private data class ActivityBarData(
+    val label: String,
+    val count: Int,
+    val isCurrent: Boolean
+)

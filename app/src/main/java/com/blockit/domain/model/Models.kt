@@ -48,6 +48,12 @@ data class FocusSession(
     val isActive: Boolean = true
 )
 
+enum class SessionStrictness {
+    NORMAL,
+    STRICT,
+    LOCKED
+}
+
 enum class TargetType {
     APP,
     WEBSITE

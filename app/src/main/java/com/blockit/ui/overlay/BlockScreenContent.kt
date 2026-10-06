@@ -139,7 +139,7 @@ fun BlockScreenContent(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "FocusShield • $profileName",
+                        text = "FocusShield: $profileName",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = textPrimary
                     )

@@ -274,7 +274,7 @@ private fun ScheduleCard(
                 val eMin = schedule.endMinuteOfDay % 60
 
                 Text(
-                    text = String.format("%02d:%02d – %02d:%02d", sHour, sMin, eHour, eMin),
+                    text = String.format("%02d:%02d to %02d:%02d", sHour, sMin, eHour, eMin),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))

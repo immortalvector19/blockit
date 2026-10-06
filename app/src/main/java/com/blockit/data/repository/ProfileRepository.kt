@@ -112,6 +112,61 @@ class ProfileRepository(
         profileDao.setProfileMode(profileId, blockMode.name)
     }
 
+    suspend fun duplicateProfile(profileId: Long): Long {
+        val original = profileDao.getProfileById(profileId) ?: return 0L
+        val copyEntity = ProfileEntity(
+            name = "${original.name} (Copy)",
+            colorHex = original.colorHex,
+            iconKey = original.iconKey,
+            isEnabled = true,
+            blockMode = original.blockMode,
+            createdAt = System.currentTimeMillis()
+        )
+        val newId = profileDao.insertProfile(copyEntity)
+        val apps = blockedAppDao.getAppsForProfile(profileId).map {
+            BlockedAppEntity(profileId = newId, packageName = it.packageName, appName = it.appName)
+        }
+        if (apps.isNotEmpty()) {
+            blockedAppDao.insertApps(apps)
+        }
+        val domains = blockedDomainDao.getDomainsForProfile(profileId).map {
+            BlockedDomainEntity(profileId = newId, pattern = it.pattern, isWildcard = it.isWildcard)
+        }
+        if (domains.isNotEmpty()) {
+            blockedDomainDao.insertDomains(domains)
+        }
+        return newId
+    }
+
+    suspend fun createTemplateProfile(templateType: String): Long {
+        return when (templateType.uppercase()) {
+            "WORK" -> {
+                createProfile(
+                    name = "Work Hours",
+                    colorHex = 0xFF2563EB,
+                    iconKey = "work",
+                    blockMode = com.blockit.domain.model.BlockMode.BLACKLIST
+                )
+            }
+            "SLEEP" -> {
+                createProfile(
+                    name = "Sleep & Rest",
+                    colorHex = 0xFF7C3AED,
+                    iconKey = "night",
+                    blockMode = com.blockit.domain.model.BlockMode.BLACKLIST
+                )
+            }
+            else -> {
+                createProfile(
+                    name = "Deep Focus",
+                    colorHex = 0xFFFF5520,
+                    iconKey = "focus",
+                    blockMode = com.blockit.domain.model.BlockMode.BLACKLIST
+                )
+            }
+        }
+    }
+
     fun observeAppsForProfile(profileId: Long): Flow<List<BlockedApp>> {
         return blockedAppDao.observeAppsForProfile(profileId).map { entities ->
             entities.map { BlockedApp(it.id, it.profileId, it.packageName, it.appName) }

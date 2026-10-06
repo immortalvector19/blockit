@@ -129,7 +129,6 @@ class MainDashboardViewModel(
             ruleEvaluator.refreshRules()
         }
     }
-    fun setBagMode(profileId: Long, mode: BlockMode) = setProfileMode(profileId, mode)
 
     fun toggleProfileEnabled(profileId: Long, isEnabled: Boolean) {
         viewModelScope.launch {
@@ -146,7 +145,26 @@ class MainDashboardViewModel(
             ruleEvaluator.refreshRules()
         }
     }
-    fun createBag(name: String, mode: BlockMode) = createProfile(name, mode)
+
+    fun duplicateProfile(profileId: Long) {
+        viewModelScope.launch {
+            val id = profileRepository.duplicateProfile(profileId)
+            if (id > 0) {
+                _selectedProfileId.value = id
+                ruleEvaluator.refreshRules()
+            }
+        }
+    }
+
+    fun createTemplateProfile(templateType: String) {
+        viewModelScope.launch {
+            val id = profileRepository.createTemplateProfile(templateType)
+            if (id > 0) {
+                _selectedProfileId.value = id
+                ruleEvaluator.refreshRules()
+            }
+        }
+    }
 
     fun deleteProfile(profileId: Long) {
         viewModelScope.launch {
@@ -156,7 +174,6 @@ class MainDashboardViewModel(
             ruleEvaluator.refreshRules()
         }
     }
-    fun deleteBag(profileId: Long) = deleteProfile(profileId)
 
     fun removeApp(profileId: Long, packageName: String) {
         viewModelScope.launch {

@@ -137,6 +137,21 @@ fun BlockItNavHost(
                 },
                 onOpenSettingsClick = {
                     navController.navigate(NavRoutes.SETTINGS_HUB)
+                },
+                onOpenStrictModeClick = {
+                    navController.navigate(NavRoutes.STRICT_MODE)
+                },
+                onOpenHealthClick = {
+                    navController.navigate(NavRoutes.HEALTH)
+                },
+                onOpenSetupGuideClick = {
+                    navController.navigate(NavRoutes.SETUP_GUIDE)
+                },
+                onOpenBackupRestoreClick = {
+                    navController.navigate(NavRoutes.BACKUP_RESTORE)
+                },
+                onOpenHowItWorksClick = {
+                    navController.navigate(NavRoutes.HOW_IT_WORKS)
                 }
             )
         }

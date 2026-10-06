@@ -145,7 +145,7 @@ fun SettingsHubScreen(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "100% On-Device • Zero Internet • No Telemetry • No Ads",
+                    text = "100% On-Device | Zero Internet | No Telemetry | No Ads",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
