@@ -17,6 +17,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import com.blockit.ui.components.AmPmTimeWheelPicker
+import com.blockit.ui.components.formatMinuteOfDayAmPm
+import com.blockit.ui.components.fromMinuteOfDay
+import com.blockit.ui.components.isOvernightWindow
+import com.blockit.ui.components.toMinuteOfDay
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.blockit.data.repository.ProfileRepository
 import com.blockit.domain.evaluator.RuleEvaluator
@@ -65,10 +71,9 @@ fun ScheduleEditorScreen(
 
     var showNewScheduleForm by remember { mutableStateOf(false) }
     var selectedDaysMask by remember { mutableIntStateOf(31) } // Mon-Fri default
-    var startHourText by remember { mutableStateOf("09") }
-    var startMinText by remember { mutableStateOf("00") }
-    var endHourText by remember { mutableStateOf("17") }
-    var endMinText by remember { mutableStateOf("00") }
+    var startMinute by remember { mutableIntStateOf(540) }     // 9:00 AM
+    var endMinute by remember { mutableIntStateOf(1020) }      // 5:00 PM
+    var activeTimeTab by remember { mutableIntStateOf(0) }     // 0: Start, 1: End
 
     Scaffold(
         modifier = modifier,
@@ -136,70 +141,84 @@ fun ScheduleEditorScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
+                        // Time Range Summary & Overnight Indicator
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Start Time (24h)", style = MaterialTheme.typography.labelMedium)
-                                Row {
-                                    OutlinedTextField(
-                                        value = startHourText,
-                                        onValueChange = { if (it.length <= 2) startHourText = it },
-                                        label = { Text("HH") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    OutlinedTextField(
-                                        value = startMinText,
-                                        onValueChange = { if (it.length <= 2) startMinText = it },
-                                        label = { Text("MM") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
+                            Text(
+                                text = "${formatMinuteOfDayAmPm(startMinute)} to ${formatMinuteOfDayAmPm(endMinute)}",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                ),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            if (isOvernightWindow(startMinute, endMinute)) {
+                                Text(
+                                    text = "Overnight Window",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
+                        }
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("End Time (24h)", style = MaterialTheme.typography.labelMedium)
-                                Row {
-                                    OutlinedTextField(
-                                        value = endHourText,
-                                        onValueChange = { if (it.length <= 2) endHourText = it },
-                                        label = { Text("HH") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    OutlinedTextField(
-                                        value = endMinText,
-                                        onValueChange = { if (it.length <= 2) endMinText = it },
-                                        label = { Text("MM") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Time Tab Selector
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = activeTimeTab == 0,
+                                onClick = { activeTimeTab = 0 },
+                                label = { Text("Start: ${formatMinuteOfDayAmPm(startMinute)}") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = activeTimeTab == 1,
+                                onClick = { activeTimeTab = 1 },
+                                label = { Text("End: ${formatMinuteOfDayAmPm(endMinute)}") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Interactive AM/PM Wheel Picker
+                        if (activeTimeTab == 0) {
+                            val (sH, sM, sPm) = fromMinuteOfDay(startMinute)
+                            AmPmTimeWheelPicker(
+                                hour12 = sH,
+                                minute = sM,
+                                isPm = sPm,
+                                onTimeChanged = { h, m, pm -> startMinute = toMinuteOfDay(h, m, pm) }
+                            )
+                        } else {
+                            val (eH, eM, ePm) = fromMinuteOfDay(endMinute)
+                            AmPmTimeWheelPicker(
+                                hour12 = eH,
+                                minute = eM,
+                                isPm = ePm,
+                                onTimeChanged = { h, m, pm -> endMinute = toMinuteOfDay(h, m, pm) }
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
-                                val sH = startHourText.toIntOrNull() ?: 9
-                                val sM = startMinText.toIntOrNull() ?: 0
-                                val eH = endHourText.toIntOrNull() ?: 17
-                                val eM = endMinText.toIntOrNull() ?: 0
-
-                                val startTotal = (sH.coerceIn(0, 23) * 60) + sM.coerceIn(0, 59)
-                                val endTotal = (eH.coerceIn(0, 23) * 60) + eM.coerceIn(0, 59)
-
                                 scope.launch {
                                     profileRepo.saveSchedule(
                                         Schedule(
                                             profileId = profileId,
                                             daysOfWeekMask = selectedDaysMask,
-                                            startMinuteOfDay = startTotal,
-                                            endMinuteOfDay = endTotal,
+                                            startMinuteOfDay = startMinute,
+                                            endMinuteOfDay = endMinute,
                                             isEnabled = true
                                         )
                                     )
@@ -268,14 +287,12 @@ private fun ScheduleCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                val sHour = schedule.startMinuteOfDay / 60
-                val sMin = schedule.startMinuteOfDay % 60
-                val eHour = schedule.endMinuteOfDay / 60
-                val eMin = schedule.endMinuteOfDay % 60
+                val timeRange = "${formatMinuteOfDayAmPm(schedule.startMinuteOfDay)} to ${formatMinuteOfDayAmPm(schedule.endMinuteOfDay)}"
+                val isOvernight = isOvernightWindow(schedule.startMinuteOfDay, schedule.endMinuteOfDay)
 
                 Text(
-                    text = String.format("%02d:%02d to %02d:%02d", sHour, sMin, eHour, eMin),
-                    style = MaterialTheme.typography.titleMedium
+                    text = if (isOvernight) "$timeRange (Overnight)" else timeRange,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 val days = buildList {

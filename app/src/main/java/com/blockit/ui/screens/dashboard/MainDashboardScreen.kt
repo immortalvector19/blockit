@@ -1,6 +1,11 @@
 package com.blockit.ui.screens.dashboard
 
 import com.blockit.ui.components.StopSessionFrictionDialog
+import com.blockit.ui.components.AmPmTimeWheelPicker
+import com.blockit.ui.components.formatMinuteOfDayAmPm
+import com.blockit.ui.components.fromMinuteOfDay
+import com.blockit.ui.components.isOvernightWindow
+import com.blockit.ui.components.toMinuteOfDay
 
 import android.content.Context
 import android.content.Intent
@@ -70,6 +75,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -476,7 +482,10 @@ fun MainDashboardScreen(
                         onSelectProfile = { viewModel.selectProfile(it) },
                         onSaveSchedule = { viewModel.saveSchedule(it) },
                         onDeleteSchedule = { viewModel.deleteSchedule(it) },
-                        onNavigateToProfiles = { selectedTab = 1 }
+                        onNavigateToProfiles = { selectedTab = 1 },
+                        onAddApps = { id -> onAddAppsClick(id) },
+                        onCreateProfile = { name, mode -> viewModel.createProfile(name, mode) },
+                        onSetProfileMode = { id, mode -> viewModel.setProfileMode(id, mode) }
                     )
                     3 -> StatisticsTabContent(
                         insightsData = insightsData
@@ -2307,7 +2316,10 @@ private fun RoutinesTabContent(
     onSelectProfile: (Long) -> Unit,
     onSaveSchedule: (Schedule) -> Unit,
     onDeleteSchedule: (Long) -> Unit,
-    onNavigateToProfiles: () -> Unit
+    onNavigateToProfiles: () -> Unit,
+    onAddApps: (Long) -> Unit,
+    onCreateProfile: (String, BlockMode) -> Unit,
+    onSetProfileMode: (Long, BlockMode) -> Unit
 ) {
     val colors = BlockitTheme.colors
     val currentProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
@@ -2315,10 +2327,11 @@ private fun RoutinesTabContent(
 
     val presets = remember {
         listOf(
-            RoutinePresetItem("Workday", "09:00 - 17:00 (M-F)", 31, 540, 1020),
-            RoutinePresetItem("Deep Work", "08:00 - 12:00 (M-F)", 31, 480, 720),
-            RoutinePresetItem("Evening", "20:30 - 23:30 (Daily)", 127, 1230, 1410),
-            RoutinePresetItem("Weekend", "10:00 - 18:00 (S-S)", 96, 600, 1080)
+            RoutinePresetItem("Workday", "9:00 AM - 5:00 PM (M-F)", 31, 540, 1020),
+            RoutinePresetItem("Deep Work", "8:00 AM - 12:00 PM (M-F)", 31, 480, 720),
+            RoutinePresetItem("Evening", "8:30 PM - 11:30 PM (Daily)", 127, 1230, 1410),
+            RoutinePresetItem("Sleep Window", "10:30 PM - 6:30 AM (Daily)", 127, 1350, 390),
+            RoutinePresetItem("Weekend", "10:00 AM - 6:00 PM (Sat-Sun)", 96, 600, 1080)
         )
     }
 
@@ -2328,49 +2341,6 @@ private fun RoutinesTabContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
-        // Timeline Header: 00:00 - 24:00
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "00:00",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Black
-                ),
-                color = colors.textPrimary
-            )
-            Text(
-                "24:00",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Black
-                ),
-                color = colors.textPrimary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Pixel Timeline Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.35f)
-                    .fillMaxSize()
-                    .background(colors.primary)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
 
         // Target Profile Selector for Routines
         if (profiles.isNotEmpty()) {
@@ -2558,16 +2528,20 @@ private fun RoutinesTabContent(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 schedules.forEachIndexed { index, schedule ->
+                    val schedProfile = profiles.find { it.id == schedule.profileId }
                     RoutineCard(
                         index = index + 1,
                         schedule = schedule,
+                        targetProfile = schedProfile,
                         onToggle = { isEnabled ->
                             onSaveSchedule(schedule.copy(isEnabled = isEnabled))
                         },
                         onDelete = { onDeleteSchedule(schedule.id) },
                         onUpdateDays = { mask ->
                             onSaveSchedule(schedule.copy(daysOfWeekMask = mask))
-                        }
+                        },
+                        onManageApps = { profId -> onAddApps(profId) },
+                        onToggleMode = { profId, mode -> onSetProfileMode(profId, mode) }
                     )
                 }
 
@@ -2594,7 +2568,10 @@ private fun RoutinesTabContent(
             onSaveSchedule = { newSchedule ->
                 onSaveSchedule(newSchedule)
                 showCreateDialog = false
-            }
+            },
+            onAddApps = onAddApps,
+            onCreateProfile = onCreateProfile,
+            onSetProfileMode = onSetProfileMode
         )
     }
 }
@@ -2612,16 +2589,25 @@ private fun CreateRoutineDialog(
     profiles: List<Profile>,
     initialProfileId: Long?,
     onDismiss: () -> Unit,
-    onSaveSchedule: (Schedule) -> Unit
+    onSaveSchedule: (Schedule) -> Unit,
+    onAddApps: (Long) -> Unit,
+    onCreateProfile: (String, BlockMode) -> Unit,
+    onSetProfileMode: (Long, BlockMode) -> Unit
 ) {
     val colors = BlockitTheme.colors
     var selectedProfileId by remember { mutableStateOf(initialProfileId ?: profiles.firstOrNull()?.id ?: 0L) }
-    var startHourText by remember { mutableStateOf("09") }
-    var startMinText by remember { mutableStateOf("00") }
-    var endHourText by remember { mutableStateOf("17") }
-    var endMinText by remember { mutableStateOf("00") }
-    var daysMask by remember { mutableIntStateOf(31) } // Mon-Fri default (bits 0..4)
+    var startMinute by remember { mutableIntStateOf(540) }  // 9:00 AM
+    var endMinute by remember { mutableIntStateOf(1020) }   // 5:00 PM
+    var activeTimeTab by remember { mutableIntStateOf(0) }  // 0: Start, 1: End
+    var daysMask by remember { mutableIntStateOf(31) }      // Mon-Fri default (bits 0..4)
 
+    // Inline Profile Creation State
+    var showInlineCreateProfile by remember { mutableStateOf(false) }
+    var inlineProfileName by remember { mutableStateOf("") }
+    var inlineProfileMode by remember { mutableStateOf(BlockMode.BLACKLIST) }
+
+    val selectedProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
+    val isOvernight = isOvernightWindow(startMinute, endMinute)
     val dayNames = listOf("M", "T", "W", "T", "F", "S", "S")
 
     AlertDialog(
@@ -2635,102 +2621,221 @@ private fun CreateRoutineDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Profile selection
-                if (profiles.size > 1) {
-                    Text(
-                        "Target Profile:",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(profiles) { profile ->
-                            val isSelected = profile.id == selectedProfileId
-                            Surface(
-                                onClick = { selectedProfileId = profile.id },
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) colors.primary else colors.surface,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                // Profile Selection & Inline Creation Section
+                Text(
+                    "Profile & Mode:",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (showInlineCreateProfile) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "Create Profile Inline",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = inlineProfileName,
+                                onValueChange = { inlineProfileName = it },
+                                label = { Text("Profile Name") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = inlineProfileMode == BlockMode.BLACKLIST,
+                                    onClick = { inlineProfileMode = BlockMode.BLACKLIST },
+                                    label = { Text("Blacklist") }
+                                )
+                                FilterChip(
+                                    selected = inlineProfileMode == BlockMode.WHITELIST,
+                                    onClick = { inlineProfileMode = BlockMode.WHITELIST },
+                                    label = { Text("Whitelist") }
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { showInlineCreateProfile = false }) {
+                                    Text("Cancel", color = colors.textMuted)
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Button(
+                                    onClick = {
+                                        if (inlineProfileName.isNotBlank()) {
+                                            onCreateProfile(inlineProfileName.trim(), inlineProfileMode)
+                                            showInlineCreateProfile = false
+                                        }
+                                    },
+                                    enabled = inlineProfileName.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                                ) {
+                                    Text("Create", color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(profiles) { profile ->
+                                val isSelected = profile.id == selectedProfileId
+                                Surface(
+                                    onClick = { selectedProfileId = profile.id },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) colors.primary else colors.surface,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                                ) {
+                                    Text(
+                                        profile.name,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isSelected) Color.White else colors.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        OutlinedButton(
+                            onClick = { showInlineCreateProfile = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("+ New", fontSize = 11.sp)
+                        }
+                    }
+
+                    if (selectedProfile != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Mode toggle
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Mode: ", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
+                                Surface(
+                                    onClick = {
+                                        val newMode = if (selectedProfile.blockMode == BlockMode.WHITELIST) BlockMode.BLACKLIST else BlockMode.WHITELIST
+                                        onSetProfileMode(selectedProfile.id, newMode)
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = colors.primary.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = if (selectedProfile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = colors.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // App manager button
+                            TextButton(
+                                onClick = { onAddApps(selectedProfile.id) },
+                                contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text(
-                                    profile.name,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    text = "Configure Apps (${selectedProfile.appCount})",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isSelected) Color.White else colors.textPrimary
+                                    color = colors.primary
                                 )
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(14.dp))
                 }
 
-                // Time Pickers
-                Text(
-                    "Hours (24-Hour Format):",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Time Range Display & Overnight Indicator
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Start Time", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = startHourText,
-                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) startHourText = it },
-                                modifier = Modifier.width(56.dp),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    textAlign = TextAlign.Center,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                singleLine = true
-                            )
-                            Text(" : ", fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                            OutlinedTextField(
-                                value = startMinText,
-                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) startMinText = it },
-                                modifier = Modifier.width(56.dp),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    textAlign = TextAlign.Center,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                singleLine = true
+                    Text(
+                        text = "${formatMinuteOfDayAmPm(startMinute)} to ${formatMinuteOfDayAmPm(endMinute)}",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        color = colors.primary
+                    )
+                    if (isOvernight) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = DestructiveRed.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "Overnight Window",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = DestructiveRed,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("End Time", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = endHourText,
-                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) endHourText = it },
-                                modifier = Modifier.width(56.dp),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    textAlign = TextAlign.Center,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                singleLine = true
-                            )
-                            Text(" : ", fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                            OutlinedTextField(
-                                value = endMinText,
-                                onValueChange = { if (it.length <= 2 && it.all { c -> c.isDigit() }) endMinText = it },
-                                modifier = Modifier.width(56.dp),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    textAlign = TextAlign.Center,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                singleLine = true
-                            )
-                        }
-                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Time Tab Selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = activeTimeTab == 0,
+                        onClick = { activeTimeTab = 0 },
+                        label = { Text("Start: ${formatMinuteOfDayAmPm(startMinute)}") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = activeTimeTab == 1,
+                        onClick = { activeTimeTab = 1 },
+                        label = { Text("End: ${formatMinuteOfDayAmPm(endMinute)}") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Scroll Wheel Picker
+                if (activeTimeTab == 0) {
+                    val (sH, sM, sPm) = fromMinuteOfDay(startMinute)
+                    AmPmTimeWheelPicker(
+                        hour12 = sH,
+                        minute = sM,
+                        isPm = sPm,
+                        onTimeChanged = { h, m, pm -> startMinute = toMinuteOfDay(h, m, pm) }
+                    )
+                } else {
+                    val (eH, eM, ePm) = fromMinuteOfDay(endMinute)
+                    AmPmTimeWheelPicker(
+                        hour12 = eH,
+                        minute = eM,
+                        isPm = ePm,
+                        onTimeChanged = { h, m, pm -> endMinute = toMinuteOfDay(h, m, pm) }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -2789,17 +2894,13 @@ private fun CreateRoutineDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val sH = (startHourText.toIntOrNull() ?: 9).coerceIn(0, 23)
-                    val sM = (startMinText.toIntOrNull() ?: 0).coerceIn(0, 59)
-                    val eH = (endHourText.toIntOrNull() ?: 17).coerceIn(0, 23)
-                    val eM = (endMinText.toIntOrNull() ?: 0).coerceIn(0, 59)
                     if (selectedProfileId > 0 && daysMask > 0) {
                         onSaveSchedule(
                             Schedule(
                                 profileId = selectedProfileId,
                                 daysOfWeekMask = daysMask,
-                                startMinuteOfDay = sH * 60 + sM,
-                                endMinuteOfDay = eH * 60 + eM,
+                                startMinuteOfDay = startMinute,
+                                endMinuteOfDay = endMinute,
                                 isEnabled = true
                             )
                         )
@@ -2825,11 +2926,17 @@ private fun CreateRoutineDialog(
 private fun RoutineCard(
     index: Int,
     schedule: Schedule,
+    targetProfile: Profile?,
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
-    onUpdateDays: (Int) -> Unit
+    onUpdateDays: (Int) -> Unit,
+    onManageApps: (Long) -> Unit,
+    onToggleMode: (Long, BlockMode) -> Unit
 ) {
     val colors = BlockitTheme.colors
+    val isOvernight = isOvernightWindow(schedule.startMinuteOfDay, schedule.endMinuteOfDay)
+    val timeRangeStr = "${formatMinuteOfDayAmPm(schedule.startMinuteOfDay)} to ${formatMinuteOfDayAmPm(schedule.endMinuteOfDay)}"
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -2842,14 +2949,35 @@ private fun RoutineCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "ROUTINE $index",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = colors.textPrimary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "ROUTINE $index",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = colors.textPrimary
+                    )
+                    if (targetProfile != null) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            onClick = {
+                                val nextMode = if (targetProfile.blockMode == BlockMode.WHITELIST) BlockMode.BLACKLIST else BlockMode.WHITELIST
+                                onToggleMode(targetProfile.id, nextMode)
+                            },
+                            shape = RoundedCornerShape(6.dp),
+                            color = colors.primary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "${targetProfile.name} (${if (targetProfile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist"})",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                                color = colors.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = schedule.isEnabled,
@@ -2868,23 +2996,56 @@ private fun RoutineCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Time range display: e.g. 09:00 to 17:00
-            val startH = schedule.startMinuteOfDay / 60
-            val startM = schedule.startMinuteOfDay % 60
-            val endH = schedule.endMinuteOfDay / 60
-            val endM = schedule.endMinuteOfDay % 60
+            // Time range display: e.g. 9:00 AM to 5:00 PM
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = timeRangeStr,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp
+                    ),
+                    color = colors.textPrimary
+                )
+                if (isOvernight) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = DestructiveRed.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "Overnight",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = DestructiveRed,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
 
-            Text(
-                text = String.format("%02d:%02d to %02d:%02d", startH, startM, endH, endM),
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 24.sp
-                ),
-                color = colors.textPrimary
-            )
+            if (targetProfile != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = { onManageApps(targetProfile.id) },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            text = "Manage Apps (${targetProfile.appCount})",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Days of Week Chips (Mon..Sun mapping to ISO bits 0..6)
             val days = listOf("M", "T", "W", "T", "F", "S", "S")
@@ -2900,10 +3061,10 @@ private fun RoutineCard(
                             .size(36.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isDayActive) colors.primary else (if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC)))
-                            .clickable {
-                                val newMask = schedule.daysOfWeekMask xor bit
-                                onUpdateDays(newMask)
-                            },
+                        .clickable {
+                            val newMask = schedule.daysOfWeekMask xor bit
+                            onUpdateDays(newMask)
+                        },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
