@@ -437,7 +437,7 @@ private fun WelcomeStep(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "A calm personal defense system against digital distraction. Built with strict privacy and zero cloud compromises.",
+                text = "A personal app and website blocker. Configured entirely on your device.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.textMuted,
                 textAlign = TextAlign.Center,
@@ -459,8 +459,8 @@ private fun WelcomeStep(
                 )
                 PillarCard(
                     icon = Icons.Default.Speed,
-                    title = "Kernel-Grade Defense",
-                    description = "Sideload-optimized architecture using Android's most reliable system APIs for unbreakable blocking."
+                    title = "Reliable Enforcement",
+                    description = "Enforces blocking rules locally using Accessibility and System Overlay APIs."
                 )
                 PillarCard(
                     icon = Icons.Default.Lock,
@@ -524,7 +524,7 @@ private fun CoreEnginesStep(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "Core Defense Engines",
+                text = "Required Permissions",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 color = colors.textPrimary
             )
@@ -559,7 +559,7 @@ private fun CoreEnginesStep(
                 title = "Full-Screen Shield Overlay",
                 subtitle = "Display Over Other Apps",
                 isGranted = hasOverlay,
-                description = "Allows FocusShield to immediately show the calm full-screen blocking card over restricted apps without delay.",
+                description = "Allows FocusShield to immediately show the full-screen blocking card over restricted apps without delay.",
                 actionText = "Grant Overlay",
                 onAction = onRequestOverlay
             )

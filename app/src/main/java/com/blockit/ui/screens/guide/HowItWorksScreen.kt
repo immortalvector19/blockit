@@ -74,7 +74,7 @@ fun HowItWorksScreen(
             LayerCard(
                 title = "Layer 1: App Interception & Compose Overlay",
                 mechanism = "AccessibilityService (TYPE_WINDOW_STATE_CHANGED) + SYSTEM_ALERT_WINDOW",
-                tradeoff = "Instant (<16ms) full-screen calm block screen directly over the distracting target app without killing process or restarting launcher. Uses UsageStatsManager polling as a secondary fallback if accessibility is ever paused.",
+                tradeoff = "Instant (<16ms) full-screen block screen directly over the target app without killing process or restarting launcher. Uses UsageStatsManager polling as a secondary fallback if accessibility is ever paused.",
                 icon = Icons.Default.Layers
             )
 

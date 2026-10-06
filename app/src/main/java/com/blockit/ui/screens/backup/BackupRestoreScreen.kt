@@ -134,13 +134,13 @@ fun BackupRestoreScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
-                            text = "100% On-Device Storage",
+                            text = "Local File Storage",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "BlockIt never connects to any cloud or remote server. Backups are exported directly to a standard JSON file on your local device storage or SD card.",
+                            text = "Backups are exported directly as standard JSON files to your device storage.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                         )

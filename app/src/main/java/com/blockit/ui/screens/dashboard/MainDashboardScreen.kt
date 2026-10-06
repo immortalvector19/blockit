@@ -77,6 +77,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedButton
@@ -239,12 +242,6 @@ fun MainDashboardScreen(
                             color = colors.textPrimary
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "100% On-Device Focus",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.textMuted
-                    )
                 }
 
                 HorizontalDivider(color = colors.border, thickness = 1.dp)
@@ -448,16 +445,6 @@ fun MainDashboardScreen(
                         packedApps = packedApps,
                         packedDomains = packedDomains,
                         activeSession = activeSession,
-                        isProtected = isProtected,
-                        onFixPermissions = {
-                            if (!isAccessibilityEnabled) {
-                                com.blockit.core.permission.PermissionIntents.openAccessibilitySettings(context)
-                            } else if (!isOverlayEnabled) {
-                                com.blockit.core.permission.PermissionIntents.openOverlaySettings(context)
-                            } else if (!isBatteryIgnored) {
-                                com.blockit.core.permission.PermissionIntents.requestBatteryExemption(context)
-                            }
-                        },
                         onSelectProfile = { viewModel.selectProfile(it) },
                         onSetProfileMode = { id, mode -> viewModel.setProfileMode(id, mode) },
                         onToggleProfile = { id, enabled ->
@@ -553,7 +540,7 @@ fun MainDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text("1. How does blocking work?", fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text("FocusShield detects distracting apps locally via Accessibility Service and renders a full-screen calm shield.", color = colors.textMuted, fontSize = 13.sp)
+                    Text("FocusShield detects configured apps locally via Accessibility Service and displays a blocking screen.", color = colors.textMuted, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("2. Whitelist vs Blacklist?", fontWeight = FontWeight.Bold, color = colors.textPrimary)
                     Text("Blacklists block selected apps. Whitelists lock down your phone except permitted apps.", color = colors.textMuted, fontSize = 13.sp)
@@ -714,57 +701,46 @@ private fun DashboardBottomBar(
     onTabSelect: (Int) -> Unit
 ) {
     val colors = BlockitTheme.colors
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = colors.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+    NavigationBar(
+        containerColor = colors.surface,
+        tonalElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(6.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val tabs = listOf(
-                Icons.Default.Timer to "Home",
-                Icons.Default.Shield to "Profiles",
-                Icons.Default.Schedule to "Schedules",
-                Icons.Default.BarChart to "Stats"
-            )
+        val tabs = listOf(
+            Icons.Default.Timer to "Home",
+            Icons.Default.Shield to "Profiles",
+            Icons.Default.Schedule to "Schedules",
+            Icons.Default.BarChart to "Stats"
+        )
 
-            tabs.forEachIndexed { index, (icon, label) ->
-                val isSelected = selectedTab == index
-                Surface(
-                    onClick = { onTabSelect(index) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent,
-                    modifier = Modifier.padding(horizontal = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = label,
-                            tint = if (isSelected) colors.primary else colors.textMuted,
-                            modifier = Modifier.size(20.dp)
+        tabs.forEachIndexed { index, (icon, label) ->
+            val isSelected = selectedTab == index
+            NavigationBarItem(
+                selected = isSelected,
+                onClick = { onTabSelect(index) },
+                icon = {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        modifier = Modifier.size(22.dp)
+                    )
+                },
+                label = {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
-                        if (isSelected) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colors.primary
-                            )
-                        }
-                    }
-                }
-            }
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = colors.primary,
+                    selectedTextColor = colors.primary,
+                    indicatorColor = colors.primary.copy(alpha = 0.12f),
+                    unselectedIconColor = colors.textMuted,
+                    unselectedTextColor = colors.textMuted
+                )
+            )
         }
     }
 }
@@ -1041,7 +1017,7 @@ private fun DashboardHomeContent(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Block digital noise and do your best work.",
+                        text = "Select a profile to start blocking.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textMuted
                     )
@@ -1053,7 +1029,6 @@ private fun DashboardHomeContent(
                         onClick = { showProfilePickerDialog = true },
                         shape = RoundedCornerShape(12.dp),
                         color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1221,8 +1196,7 @@ private fun DashboardHomeContent(
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
-                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC)
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
@@ -1246,8 +1220,7 @@ private fun DashboardHomeContent(
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
-                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC)
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
@@ -1792,8 +1765,6 @@ private fun ProfilesTabContent(
     packedApps: List<BlockedApp>,
     packedDomains: List<BlockedDomain>,
     activeSession: FocusSession?,
-    isProtected: Boolean,
-    onFixPermissions: () -> Unit,
     onSelectProfile: (Long) -> Unit,
     onSetProfileMode: (Long, BlockMode) -> Unit,
     onToggleProfile: (Long, Boolean) -> Unit,
@@ -1816,35 +1787,6 @@ private fun ProfilesTabContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
-        if (!isProtected) {
-            Card(
-                onClick = onFixPermissions,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = if (colors.isDark) Color(0xFF451A1A) else Color(0xFFFFE4E6)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFDA4AF))
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE11D48), modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Blocking Engine Needs Setup",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
-                        )
-                        Text(
-                            text = "Tap here to grant Accessibility, Display Over Apps, and Battery Exemption.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
-                        )
-                    }
-                }
-            }
-        }
 
         if (activeSession != null) {
             Card(

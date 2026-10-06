@@ -173,7 +173,7 @@ fun SetupGuideScreen(
             // 2. Draw Over Apps (Overlay)
             PermissionCard(
                 title = "Display Over Other Apps",
-                description = "Renders the calm full-screen blocking overlay over distracting apps without delay.",
+                description = "Renders the full-screen blocking overlay over distracting apps without delay.",
                 isGranted = isOverlayGranted,
                 icon = Icons.Default.Layers,
                 buttonText = "Grant Overlay Permission",

@@ -7,7 +7,7 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
-    <!-- Overlay permission for instant full-screen calm block screen -->
+    <!-- Overlay permission for instant full-screen block screen -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Direct battery optimization exemption dialog -->
