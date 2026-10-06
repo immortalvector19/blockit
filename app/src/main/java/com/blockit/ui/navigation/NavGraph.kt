@@ -79,7 +79,7 @@ fun BlockItNavHost(
         return
     }
 
-    val startDestination = if (onboardingCompleted == true) NavRoutes.PROFILES else NavRoutes.ONBOARDING
+    val startDestination = NavRoutes.PROFILES
 
     NavHost(
         navController = navController,
@@ -111,14 +111,11 @@ fun BlockItNavHost(
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     ) {
         composable(NavRoutes.ONBOARDING) {
-            OnboardingScreen(
-                preferenceManager = container.preferenceManager,
-                onComplete = {
-                    navController.navigate(NavRoutes.PROFILES) {
-                        popUpTo(NavRoutes.ONBOARDING) { inclusive = true }
-                    }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                navController.navigate(NavRoutes.PROFILES) {
+                    popUpTo(NavRoutes.ONBOARDING) { inclusive = true }
                 }
-            )
+            }
         }
         composable(NavRoutes.PROFILES) {
             val viewModel: MainDashboardViewModel = viewModel(

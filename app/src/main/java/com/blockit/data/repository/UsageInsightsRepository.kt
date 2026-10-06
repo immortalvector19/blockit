@@ -45,19 +45,20 @@ class UsageInsightsRepository(
             blockEventDao.observeTopBlockedTargets(10),
             sessionsFlow
         ) { counts, yearEvents, topTargets, sessions ->
+            val currentTime = System.currentTimeMillis()
             val total = counts.first
             val today = counts.second
             val week = counts.third
             // Calculate real focus minutes from stored sessions
             val totalFocusMs = sessions.sumOf { sess ->
-                val end = if (sess.isActive) now.coerceAtMost(sess.endTimestamp) else sess.endTimestamp
+                val end = if (sess.isActive) currentTime.coerceAtMost(sess.endTimestamp) else sess.endTimestamp
                 (end - sess.startTimestamp).coerceAtLeast(0L)
             }
             val totalFocusMinutes = (totalFocusMs / 1000 / 60).toInt()
             val formattedFocusTime = TimeSavedCalculator.formatMinutes(totalFocusMinutes)
 
             // Calculate real 7-day daily histogram
-            val dailyStats = computeDailyStats(yearEvents, now)
+            val dailyStats = computeDailyStats(yearEvents, currentTime)
 
             val minutesSaved = TimeSavedCalculator.calculateMinutesSaved(total)
             val formattedTime = TimeSavedCalculator.formatTimeSaved(minutesSaved)
@@ -106,11 +107,16 @@ class UsageInsightsRepository(
         val dayBounds = mutableListOf<Triple<String, Long, Long>>()
         for (i in 6 downTo 0) {
             val dayCal = Calendar.getInstance().apply {
-                timeInMillis = calendar.timeInMillis - (i * 24 * 60 * 60 * 1000L)
+                timeInMillis = calendar.timeInMillis
+                add(Calendar.DAY_OF_YEAR, -i)
             }
             val startMs = dayCal.timeInMillis
-            val endMs = startMs + (24 * 60 * 60 * 1000L)
-            val label = dayFormat.format(Date(startMs))
+            val endCal = Calendar.getInstance().apply {
+                timeInMillis = startMs
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
+            val endMs = endCal.timeInMillis
+            val label = dayFormat.format(Date(startMs)).take(3).uppercase()
             dayBounds.add(Triple(label, startMs, endMs))
         }
 

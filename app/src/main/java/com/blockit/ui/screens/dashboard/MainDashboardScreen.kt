@@ -154,6 +154,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainDashboardScreen(
     viewModel: MainDashboardViewModel,
@@ -190,6 +191,9 @@ fun MainDashboardScreen(
     var pendingStopSessionId by remember { mutableStateOf<Long?>(null) }
     var activeSessionStrictness by rememberSaveable { mutableStateOf(SessionStrictness.NORMAL) }
 
+    val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
+    var showOnboardingChecklist by rememberSaveable { mutableStateOf(false) }
+
     // Live permission check
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
     var isOverlayEnabled by remember { mutableStateOf(false) }
@@ -201,12 +205,24 @@ fun MainDashboardScreen(
         isBatteryIgnored = com.blockit.core.permission.PermissionIntents.isIgnoringBatteryOptimizations(context)
     }
 
+    LaunchedEffect(onboardingCompleted) {
+        if (!onboardingCompleted) {
+            showOnboardingChecklist = true
+        }
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         refreshPermissions()
+        if (!onboardingCompleted) {
+            showOnboardingChecklist = true
+        }
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshPermissions()
+                if (!onboardingCompleted) {
+                    showOnboardingChecklist = true
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -422,13 +438,7 @@ fun MainDashboardScreen(
                         isProtected = isProtected,
                         insightsData = insightsData,
                         onFixPermissions = {
-                            if (!isAccessibilityEnabled) {
-                                com.blockit.core.permission.PermissionIntents.openAccessibilitySettings(context)
-                            } else if (!isOverlayEnabled) {
-                                com.blockit.core.permission.PermissionIntents.openOverlaySettings(context)
-                            } else if (!isBatteryIgnored) {
-                                com.blockit.core.permission.PermissionIntents.requestBatteryExemption(context)
-                            }
+                            showOnboardingChecklist = true
                         },
                         onSelectProfile = { viewModel.selectProfile(it) },
                         onStartSession = { profId, mins, strictness ->
@@ -488,7 +498,8 @@ fun MainDashboardScreen(
                         onSetProfileMode = { id, mode -> viewModel.setProfileMode(id, mode) }
                     )
                     3 -> StatisticsTabContent(
-                        insightsData = insightsData
+                        insightsData = insightsData,
+                        activeSession = activeSession
                     )
                 }
             }
@@ -519,6 +530,37 @@ fun MainDashboardScreen(
                         pendingStopSessionId = null
                         if (id != null) viewModel.endSession(id)
                     }
+                )
+            }
+
+            if (showOnboardingChecklist) {
+                com.blockit.ui.screens.onboarding.OnboardingChecklistSheet(
+                    isAccessibilityEnabled = isAccessibilityEnabled,
+                    isOverlayEnabled = isOverlayEnabled,
+                    isBatteryIgnored = isBatteryIgnored,
+                    isPinConfigured = strictConfig.unlockPin.isNotBlank(),
+                    onEnableAccessibility = {
+                        com.blockit.core.permission.PermissionIntents.openAccessibilitySettings(context)
+                    },
+                    onEnableOverlay = {
+                        com.blockit.core.permission.PermissionIntents.launchOverlaySettings(context)
+                    },
+                    onEnableBattery = {
+                        com.blockit.core.permission.PermissionIntents.requestBatteryExemption(context)
+                    },
+                    onSetPin = { pin ->
+                        viewModel.setUnlockPin(pin)
+                    },
+                    onComplete = {
+                        viewModel.completeOnboarding()
+                        showOnboardingChecklist = false
+                    },
+                    onDismissRequest = {
+                        if (onboardingCompleted || isProtected) {
+                            showOnboardingChecklist = false
+                        }
+                    },
+                    canDismiss = onboardingCompleted || isProtected
                 )
             }
         }
@@ -1180,7 +1222,14 @@ private fun DashboardHomeContent(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val hasData = insightsData.blockedToday > 0 || insightsData.totalFocusMinutes > 0
+                val liveSessionMinutes = if (activeSession != null) {
+                    val elapsedMs = (System.currentTimeMillis() - activeSession.startTimestamp).coerceAtLeast(0L)
+                    (elapsedMs / 1000 / 60).toInt()
+                } else 0
+                val liveTotalFocusMinutes = insightsData.totalFocusMinutes + liveSessionMinutes
+                val liveFormattedFocusTime = TimeSavedCalculator.formatMinutes(liveTotalFocusMinutes)
+
+                val hasData = insightsData.blockedToday > 0 || liveTotalFocusMinutes > 0 || activeSession != null
 
                 if (!hasData) {
                     Box(
@@ -1215,7 +1264,7 @@ private fun DashboardHomeContent(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = insightsData.formattedFocusTime,
+                                    text = liveFormattedFocusTime,
                                     style = MaterialTheme.typography.titleLarge.copy(
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Black
@@ -3084,14 +3133,22 @@ private fun RoutineCard(
 // -------------------------------------------------------------
 @Composable
 private fun StatisticsTabContent(
-    insightsData: UsageInsightsData
+    insightsData: UsageInsightsData,
+    activeSession: FocusSession? = null
 ) {
     val colors = BlockitTheme.colors
     var selectedFilter by remember { mutableIntStateOf(0) } // 0: Week, 1: Month, 2: Year
     val currentMonthYear = remember {
         SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date()).uppercase()
     }
-    val hasData = insightsData.totalBlocked > 0 || insightsData.totalFocusMinutes > 0
+
+    val liveSessionMinutes = if (activeSession != null) {
+        val elapsedMs = (System.currentTimeMillis() - activeSession.startTimestamp).coerceAtLeast(0L)
+        (elapsedMs / 1000 / 60).toInt()
+    } else 0
+    val liveTotalFocusMinutes = insightsData.totalFocusMinutes + liveSessionMinutes
+    val liveFormattedFocusTime = TimeSavedCalculator.formatMinutes(liveTotalFocusMinutes)
+    val hasData = insightsData.totalBlocked > 0 || liveTotalFocusMinutes > 0 || activeSession != null
 
     Column(
         modifier = Modifier
@@ -3114,7 +3171,7 @@ private fun StatisticsTabContent(
                 color = colors.textPrimary
             )
             Text(
-                text = "${insightsData.formattedFocusTime} FOCUSED",
+                text = "$liveFormattedFocusTime FOCUSED",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Black
@@ -3172,16 +3229,22 @@ private fun StatisticsTabContent(
                             val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
                             val bars = (6 downTo 0).map { i ->
                                 val dayCal = Calendar.getInstance().apply {
-                                    timeInMillis = now - (i * 24 * 60 * 60 * 1000L)
+                                    timeInMillis = now
+                                    add(Calendar.DAY_OF_YEAR, -i)
                                     set(Calendar.HOUR_OF_DAY, 0)
                                     set(Calendar.MINUTE, 0)
                                     set(Calendar.SECOND, 0)
                                     set(Calendar.MILLISECOND, 0)
                                 }
                                 val start: Long = dayCal.timeInMillis
-                                val end: Long = start + (24 * 60 * 60 * 1000L)
+                                val endCal = Calendar.getInstance().apply {
+                                    timeInMillis = start
+                                    add(Calendar.DAY_OF_YEAR, 1)
+                                }
+                                val end: Long = endCal.timeInMillis
                                 val count = events.count { it.timestamp in start until end }
-                                ActivityBarData(dayFormat.format(Date(start)).uppercase(), count, i == 0)
+                                val label = dayFormat.format(Date(start)).take(3).uppercase()
+                                ActivityBarData(label, count, i == 0)
                             }
                             Pair("Real logged intercepts across the past 7 days.", bars)
                         }
@@ -3258,7 +3321,7 @@ private fun StatisticsTabContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(110.dp),
+                        .height(120.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
@@ -3275,43 +3338,58 @@ private fun StatisticsTabContent(
                         }
                     } else {
                         activityBars.forEach { bar ->
-                            val heightFraction = if (bar.count == 0) 0.05f else (bar.count.toFloat() / maxCount).coerceIn(0.12f, 1f)
+                            val heightFraction = if (bar.count == 0) 0.08f else (bar.count.toFloat() / maxCount).coerceIn(0.15f, 1f)
 
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Bottom,
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
                             ) {
-                                if (bar.count > 0) {
-                                    Text(
-                                        text = "${bar.count}",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.Monospace
-                                        ),
-                                        color = colors.primary
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                }
+                                // Upper area containing the bar and count
                                 Box(
                                     modifier = Modifier
-                                        .width(20.dp)
-                                        .fillMaxHeight(heightFraction)
-                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                        .background(
-                                            if (bar.count > 0) colors.primary
-                                            else if (bar.isCurrent) colors.primary.copy(alpha = 0.35f)
-                                            else if (colors.isDark) colors.surfaceVariant else CharcoalDark.copy(alpha = 0.15f)
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Bottom
+                                    ) {
+                                        if (bar.count > 0) {
+                                            Text(
+                                                text = "${bar.count}",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = FontFamily.Monospace
+                                                ),
+                                                color = colors.primary
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .width(18.dp)
+                                                .height((70.dp * heightFraction).coerceIn(6.dp, 70.dp))
+                                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                                .background(
+                                                    if (bar.count > 0) colors.primary
+                                                    else if (bar.isCurrent) colors.primary.copy(alpha = 0.35f)
+                                                    else if (colors.isDark) colors.surfaceVariant else CharcoalDark.copy(alpha = 0.15f)
+                                                )
                                         )
-                                )
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(6.dp))
+                                // Guaranteed visible day label
                                 Text(
                                     text = bar.label,
+                                    maxLines = 1,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = if (bar.isCurrent) FontWeight.Bold else FontWeight.Normal,
                                         fontFamily = FontFamily.Monospace
                                     ),
@@ -3366,7 +3444,7 @@ private fun StatisticsTabContent(
             )
             MetricCard(
                 title = "Focus Time",
-                value = insightsData.formattedFocusTime,
+                value = liveFormattedFocusTime,
                 modifier = Modifier.weight(1f)
             )
         }

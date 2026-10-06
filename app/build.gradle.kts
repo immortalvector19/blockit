@@ -21,9 +21,18 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // Uses the standard Android keystore so that FocusShield.apk is fully signed,
+            // valid, and installable on user devices without signature verification failures.
+            initWith(getByName("debug"))
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -32,6 +41,15 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             isDebuggable = true
+        }
+    }
+
+    applicationVariants.all {
+        if (buildType.name == "release") {
+            outputs.all {
+                val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+                output?.outputFileName = "FocusShield.apk"
+            }
         }
     }
 

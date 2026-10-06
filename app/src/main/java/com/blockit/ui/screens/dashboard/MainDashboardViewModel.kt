@@ -65,6 +65,25 @@ class MainDashboardViewModel(
             initialValue = UsageInsightsData()
         )
 
+    val onboardingCompleted: StateFlow<Boolean> = preferenceManager.onboardingCompleted
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
+    fun completeOnboarding() {
+        viewModelScope.launch {
+            preferenceManager.setOnboardingCompleted(true)
+        }
+    }
+
+    fun setUnlockPin(pin: String) {
+        viewModelScope.launch {
+            preferenceManager.setUnlockPin(pin)
+        }
+    }
+
     val themeMode: StateFlow<com.blockit.domain.model.ThemeMode> = preferenceManager.themeMode
         .stateIn(
             scope = viewModelScope,
