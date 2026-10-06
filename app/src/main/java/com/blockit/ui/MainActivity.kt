@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = BlockItApplication.from(this)
+        checkWhitelistLockdown(container)
 
         setContent {
             val themeMode by container.preferenceManager.themeMode.collectAsState(initial = ThemeMode.LIGHT)
@@ -59,6 +60,22 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkWhitelistLockdown(BlockItApplication.from(this))
+    }
+
+    private fun checkWhitelistLockdown(container: com.blockit.core.di.AppContainer) {
+        val snapshot = container.ruleEvaluator.getSnapshot()
+        if (snapshot.hasActiveWhitelist) {
+            val intent = android.content.Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(intent)
+            finish()
         }
     }
 }

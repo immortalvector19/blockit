@@ -58,6 +58,14 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.BlockIt.Overlay" />
 
+        <!-- Whitelist Mode Dedicated Kiosk Launcher -->
+        <activity
+            android:name=".ui.screens.focushome.FocusHomeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.BlockIt" />
+
         <!-- Foreground App Detection Accessibility Service -->
         <service
             android:name=".service.accessibility.BlockAccessibilityService"

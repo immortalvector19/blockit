@@ -54,17 +54,18 @@ class RuleEvaluator(
         val now = System.currentTimeMillis()
         val calendar = Calendar.getInstance()
 
-        // 1. Fetch enabled profiles
-        val profiles = db.profileDao().getEnabledProfiles()
+        // 1. Fetch active focus sessions
+        val activeSessions = db.focusSessionDao().getActiveSessions(now)
+        val activeSessionProfileIds = activeSessions.map { it.profileId }.toSet()
+
+        // 2. Fetch all profiles and filter by enabled OR active in a focus session
+        val allProfiles = db.profileDao().getAllProfiles()
+        val profiles = allProfiles.filter { it.isEnabled || activeSessionProfileIds.contains(it.id) }
         if (profiles.isEmpty()) {
             cachedSnapshot = ActiveRuleSnapshot()
             _snapshotFlow.value = cachedSnapshot
             return@withContext
         }
-
-        // 2. Fetch active focus sessions
-        val activeSessions = db.focusSessionDao().getActiveSessions(now)
-        val activeSessionProfileIds = activeSessions.map { it.profileId }.toSet()
 
         // 3. Fetch schedules for all enabled profiles
         val allSchedules = db.scheduleDao().getAllActiveSchedules()
@@ -150,12 +151,13 @@ class RuleEvaluator(
     fun isAppBlocked(packageName: String): EvaluationResult {
         if (packageName.isBlank()) return EvaluationResult(isBlocked = false)
 
-        // Essential System apps (launcher, dialer, keyboard, system UI, permission dialog, FocusShield) are NEVER blocked
-        if (systemAppResolver?.isAlwaysPermitted(packageName) == true) {
+        val snapshot = cachedSnapshot
+
+        // Essential System apps (dialer, keyboard, system UI, permission dialog, FocusShield) are NEVER blocked.
+        // In Whitelist mode, the third-party Home Launcher is NOT exempt!
+        if (systemAppResolver?.isAlwaysPermitted(packageName, isWhitelistMode = snapshot.hasActiveWhitelist) == true) {
             return EvaluationResult(isBlocked = false)
         }
-
-        val snapshot = cachedSnapshot
 
         // Whitelist mode: if active, ONLY explicitly whitelisted apps are allowed
         if (snapshot.hasActiveWhitelist) {

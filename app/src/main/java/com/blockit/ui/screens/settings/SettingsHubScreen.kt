@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,6 +48,7 @@ fun SettingsHubScreen(
     onNavigateToHealth: () -> Unit,
     onNavigateToThemeSettings: () -> Unit,
     onNavigateToStrictMode: () -> Unit,
+    onNavigateToAlwaysAllowed: () -> Unit = {},
     onNavigateToSetupGuide: () -> Unit,
     onNavigateToBackupRestore: () -> Unit,
     onNavigateToHowItWorks: () -> Unit,
@@ -86,6 +88,13 @@ fun SettingsHubScreen(
                 subtitle = "Live accessibility status, event timestamp, overlay test, and battery exemption",
                 icon = Icons.Default.MonitorHeart,
                 onClick = onNavigateToHealth
+            )
+
+            SettingsNavigationCard(
+                title = "Always Allowed Apps",
+                subtitle = "Phone dialer and emergency apps exempt from all focus blocks",
+                icon = Icons.Default.Phone,
+                onClick = onNavigateToAlwaysAllowed
             )
 
             SettingsNavigationCard(

@@ -17,8 +17,26 @@ class FakeSystemAppResolver(
         "com.google.android.permissioncontroller"
     )
 ) : SystemAppResolver {
-    override fun isAlwaysPermitted(packageName: String): Boolean = permitted.contains(packageName)
-    override fun getAlwaysPermittedPackages(): Set<String> = permitted
+    private var userAllowed = mutableSetOf<String>()
+
+    override fun isAlwaysPermitted(packageName: String, isWhitelistMode: Boolean): Boolean {
+        if (packageName == "com.android.launcher3") {
+            return !isWhitelistMode // Home launcher blocked during whitelist to enforce Focus Home
+        }
+        return permitted.contains(packageName) || userAllowed.contains(packageName)
+    }
+
+    override fun isSystemCritical(packageName: String): Boolean {
+        return packageName != "com.android.launcher3" && permitted.contains(packageName)
+    }
+
+    override fun getAlwaysPermittedPackages(): Set<String> = permitted + userAllowed
+    override fun getHomePackages(): Set<String> = setOf("com.android.launcher3")
+    override fun getDefaultDialerPackage(): String = "com.google.android.dialer"
+    override fun getUserAlwaysAllowedPackages(): Set<String> = userAllowed
+    override fun setUserAlwaysAllowedPackages(packages: Set<String>) {
+        userAllowed = packages.toMutableSet()
+    }
 }
 
 class RuleEvaluatorTest {
@@ -50,10 +68,13 @@ class RuleEvaluatorTest {
 
         val unblockedResult = evaluator.isAppBlocked("com.google.android.apps.messaging")
         assertFalse(unblockedResult.isBlocked)
+
+        // Normal launcher is allowed in blacklist mode
+        assertFalse(evaluator.isAppBlocked("com.android.launcher3").isBlocked)
     }
 
     @Test
-    fun isAppBlocked_whitelistMode_permitsOnlyWhitelistedPackagesAndSystemApps() {
+    fun isAppBlocked_whitelistMode_permitsOnlyWhitelistedPackagesAndSystemCritical() {
         evaluator.setSnapshot(
             ActiveRuleSnapshot(
                 hasActiveWhitelist = true,
@@ -76,13 +97,34 @@ class RuleEvaluatorTest {
         val allowedCalc = evaluator.isAppBlocked("com.sec.android.app.popupcalculator")
         assertFalse(allowedCalc.isBlocked)
 
-        // Essential System apps (launcher, dialer, keyboard, system UI, permission dialog, FocusShield) are NEVER blocked
-        assertFalse(evaluator.isAppBlocked("com.android.launcher3").isBlocked)
+        // Third-party home launcher is BLOCKED in Whitelist Mode so user stays in Focus Home
+        val launcherResult = evaluator.isAppBlocked("com.android.launcher3")
+        assertTrue("Launcher must be blocked in Whitelist mode to hold Focus Home kiosk", launcherResult.isBlocked)
+
+        // System critical apps (dialer, keyboard, system UI, permission dialog, FocusShield) are NEVER blocked
         assertFalse(evaluator.isAppBlocked("com.google.android.dialer").isBlocked)
         assertFalse(evaluator.isAppBlocked("com.google.android.inputmethod.latin").isBlocked)
         assertFalse(evaluator.isAppBlocked("com.android.systemui").isBlocked)
         assertFalse(evaluator.isAppBlocked("com.google.android.permissioncontroller").isBlocked)
         assertFalse(evaluator.isAppBlocked("com.blockit").isBlocked)
+    }
+
+    @Test
+    fun isAppBlocked_evaluationLatency_underOneSecondTarget() {
+        evaluator.setSnapshot(
+            ActiveRuleSnapshot(
+                hasActiveWhitelist = true,
+                whitelistProfileName = "Lockdown",
+                whitelistPackages = (1..500).map { "com.app.test$it" }.toSet()
+            )
+        )
+
+        val start = System.nanoTime()
+        val result = evaluator.isAppBlocked("com.app.test250")
+        val elapsedMs = (System.nanoTime() - start) / 1_000_000.0
+
+        assertFalse(result.isBlocked)
+        assertTrue("Rule lookup must be instantaneous (< 10ms)", elapsedMs < 10.0)
     }
 
     @Test

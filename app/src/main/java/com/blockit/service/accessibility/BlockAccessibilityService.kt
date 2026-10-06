@@ -162,23 +162,14 @@ class BlockAccessibilityService : AccessibilityService() {
         // If user is on the Home Launcher:
         if (isHome) {
             if (snapshot.hasActiveWhitelist) {
-                // Whitelist mode: overlay the home screen and show permitted apps
-                overlayController.showBlockOverlay(
-                    targetIdentifier = "Home Screen",
-                    profileName = snapshot.whitelistProfileName ?: "Whitelist",
-                    reason = "Home screen covered during Whitelist Focus Mode",
-                    isWhitelistBlock = true,
-                    allowedApps = snapshot.whitelistPackages.toList(),
-                    onHomeClicked = {},
-                    onOpenAllowedApp = { appPkg ->
-                        overlayController.hideBlockOverlay()
-                        val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
-                        launchIntent?.let {
-                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                            startActivity(it)
-                        }
-                    }
-                )
+                // Whitelist mode: redirect to Focus Home kiosk surface
+                if (overlayController.isOverlayShowing()) {
+                    overlayController.hideBlockOverlay()
+                }
+                val focusHomeIntent = Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                startActivity(focusHomeIntent)
             } else {
                 // Blacklist mode: normal phone usage on home screen
                 if (overlayController.isOverlayShowing()) {
@@ -251,6 +242,18 @@ class BlockAccessibilityService : AccessibilityService() {
         if (result.isBlocked) {
             val profile = result.profileName ?: "Focus"
             val reason = result.reason ?: "App blocked"
+
+            if (result.isWhitelistBlock) {
+                if (overlayController.isOverlayShowing()) {
+                    overlayController.hideBlockOverlay()
+                }
+                val focusHomeIntent = Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                startActivity(focusHomeIntent)
+                logBlockEvent(pkgName, TargetType.APP, profile)
+                return true
+            }
 
             overlayController.showBlockOverlay(
                 targetIdentifier = pkgName,

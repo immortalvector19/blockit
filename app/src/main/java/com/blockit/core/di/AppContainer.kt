@@ -70,7 +70,7 @@ class AppContainer(private val context: Context) {
     }
 
     val focusSessionManager: FocusSessionManager by lazy {
-        FocusSessionManager(database, ruleEvaluator, scheduleManager, focusNotificationManager)
+        FocusSessionManager(database, ruleEvaluator, scheduleManager, focusNotificationManager, context)
     }
 
     val usageInsightsRepository: com.blockit.data.repository.UsageInsightsRepository by lazy {

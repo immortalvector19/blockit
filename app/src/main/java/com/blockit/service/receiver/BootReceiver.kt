@@ -21,6 +21,14 @@ class BootReceiver : BroadcastReceiver() {
                 container.ruleEvaluator.refreshRules()
                 container.scheduleManager.scheduleNextBoundaryAlarm()
                 container.focusSessionManager.restoreActiveSessionNotification()
+
+                val snapshot = container.ruleEvaluator.getSnapshot()
+                if (snapshot.hasActiveWhitelist) {
+                    val homeIntent = Intent(context, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    context.startActivity(homeIntent)
+                }
             }
         }
     }

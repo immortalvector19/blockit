@@ -1,5 +1,8 @@
 package com.blockit.data.repository
 
+import android.content.Context
+import android.content.Intent
+import android.util.Log
 import com.blockit.data.local.db.BlockItDatabase
 import com.blockit.data.local.db.entity.FocusSessionEntity
 import com.blockit.domain.evaluator.RuleEvaluator
@@ -13,7 +16,8 @@ class FocusSessionManager(
     private val database: BlockItDatabase,
     private val ruleEvaluator: RuleEvaluator,
     private val scheduleManager: ScheduleManager,
-    private val notificationManager: FocusNotificationManager? = null
+    private val notificationManager: FocusNotificationManager? = null,
+    private val context: Context? = null
 ) {
 
     fun observeActiveSession(): Flow<FocusSession?> {
@@ -32,7 +36,8 @@ class FocusSessionManager(
     }
 
     suspend fun startSession(profileId: Long, durationMinutes: Int): Long {
-        val now = System.currentTimeMillis()
+        val t0 = System.currentTimeMillis()
+        val now = t0
         val end = now + (durationMinutes * 60 * 1000L)
         val entity = FocusSessionEntity(
             profileId = profileId,
@@ -46,6 +51,25 @@ class FocusSessionManager(
 
         val profile = database.profileDao().getProfileById(profileId)
         notificationManager?.showSessionNotification(profile?.name ?: "Focus Session", end)
+
+        val elapsedMs = System.currentTimeMillis() - t0
+        Log.i(
+            "FocusShieldTiming",
+            "Focus session $id started and rules enforced in ${elapsedMs}ms (Profile: ${profile?.name}, Mode: ${profile?.blockMode})"
+        )
+
+        // Whitelist mode is a real lockdown: immediately transfer foreground to Focus Home
+        if (profile?.blockMode == "WHITELIST" && context != null) {
+            try {
+                val intent = Intent(context, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("FocusSessionManager", "Error launching FocusHomeActivity", e)
+            }
+        }
+
         return id
     }
 

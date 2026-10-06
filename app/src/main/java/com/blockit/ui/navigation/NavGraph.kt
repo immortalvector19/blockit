@@ -49,6 +49,7 @@ object NavRoutes {
     const val SCHEDULES = "profile/{profileId}/schedules"
     const val SETTINGS_HUB = "settings"
     const val HEALTH = "settings/health"
+    const val ALWAYS_ALLOWED = "settings/always_allowed"
     const val THEME_SETTINGS = "settings/theme"
     const val STRICT_MODE = "settings/strict_mode"
     const val SETUP_GUIDE = "settings/setup_guide"
@@ -216,12 +217,22 @@ fun BlockItNavHost(
         composable(NavRoutes.SETTINGS_HUB) {
             SettingsHubScreen(
                 onNavigateToHealth = { navController.navigate(NavRoutes.HEALTH) },
+                onNavigateToAlwaysAllowed = { navController.navigate(NavRoutes.ALWAYS_ALLOWED) },
                 onNavigateToThemeSettings = { navController.navigate(NavRoutes.THEME_SETTINGS) },
                 onNavigateToStrictMode = { navController.navigate(NavRoutes.STRICT_MODE) },
                 onNavigateToSetupGuide = { navController.navigate(NavRoutes.SETUP_GUIDE) },
                 onNavigateToBackupRestore = { navController.navigate(NavRoutes.BACKUP_RESTORE) },
                 onNavigateToHowItWorks = { navController.navigate(NavRoutes.HOW_IT_WORKS) },
                 onNavigateToOnboarding = { navController.navigate(NavRoutes.ONBOARDING) },
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.ALWAYS_ALLOWED) {
+            com.blockit.ui.screens.settings.AlwaysAllowedAppsScreen(
+                systemAppResolver = container.systemAppResolver,
+                installedAppsRepository = container.installedAppsRepository,
+                ruleEvaluator = container.ruleEvaluator,
                 onBackClick = { navController.popBackStack() }
             )
         }
