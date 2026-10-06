@@ -44,7 +44,8 @@ data class StrictModeBackup(
     val targetPassage: String,
     val protectSettings: Boolean,
     val unlockPin: String = "",
-    val requirePinToStopSession: Boolean = true
+    val requirePinToStopSession: Boolean = true,
+    val maxPausesPerSession: Int = 3
 )
 
 object BackupJsonSerializer {
@@ -105,6 +106,7 @@ object BackupJsonSerializer {
                 put("protectSettings", sm.protectSettings)
                 put("unlockPin", sm.unlockPin)
                 put("requirePinToStopSession", sm.requirePinToStopSession)
+                put("maxPausesPerSession", sm.maxPausesPerSession)
             }
             root.put("strictMode", smObj)
         }
@@ -196,7 +198,8 @@ object BackupJsonSerializer {
                 targetPassage = it.optString("targetPassage", "I choose focus and clarity over momentary distraction."),
                 protectSettings = it.optBoolean("protectSettings", true),
                 unlockPin = it.optString("unlockPin", ""),
-                requirePinToStopSession = it.optBoolean("requirePinToStopSession", true)
+                requirePinToStopSession = it.optBoolean("requirePinToStopSession", true),
+                maxPausesPerSession = it.optInt("maxPausesPerSession", 3)
             )
         }
 

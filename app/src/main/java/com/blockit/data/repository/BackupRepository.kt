@@ -65,7 +65,8 @@ class BackupRepository(
             targetPassage = strictMode.targetPassage,
             protectSettings = strictMode.protectSettings,
             unlockPin = strictMode.unlockPin,
-            requirePinToStopSession = strictMode.requirePinToStopSession
+            requirePinToStopSession = strictMode.requirePinToStopSession,
+            maxPausesPerSession = strictMode.maxPausesPerSession
         )
 
         val payload = BackupPayload(
@@ -149,7 +150,8 @@ class BackupRepository(
                         protectSettings = sm.protectSettings,
                         targetPassage = sm.targetPassage,
                         unlockPin = sm.unlockPin,
-                        requirePinToStopSession = sm.requirePinToStopSession
+                        requirePinToStopSession = sm.requirePinToStopSession,
+                        maxPausesPerSession = sm.maxPausesPerSession
                     )
                 )
             }

@@ -80,7 +80,8 @@ data class StrictModeConfig(
     val protectSettings: Boolean = true,
     val targetPassage: String = "I choose focus and clarity over momentary distraction.",
     val unlockPin: String = "",
-    val requirePinToStopSession: Boolean = true
+    val requirePinToStopSession: Boolean = true,
+    val maxPausesPerSession: Int = 3
 )
 
 data class InstalledAppInfo(

@@ -26,6 +26,7 @@ class PreferenceManager(private val context: Context) {
         val STRICT_MODE_PASSAGE = stringPreferencesKey("strict_mode_passage")
         val STRICT_MODE_PIN = stringPreferencesKey("strict_mode_pin")
         val STRICT_MODE_REQUIRE_PIN = booleanPreferencesKey("strict_mode_require_pin")
+        val STRICT_MODE_MAX_PAUSES = intPreferencesKey("strict_mode_max_pauses")
         val VPN_FILTER_ENABLED = booleanPreferencesKey("vpn_filter_enabled")
         val ACCESSIBILITY_URL_ENABLED = booleanPreferencesKey("accessibility_url_enabled")
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -48,7 +49,8 @@ class PreferenceManager(private val context: Context) {
             protectSettings = preferences[Keys.STRICT_MODE_PROTECT_SETTINGS] ?: true,
             targetPassage = preferences[Keys.STRICT_MODE_PASSAGE] ?: "I choose focus and clarity over momentary distraction.",
             unlockPin = preferences[Keys.STRICT_MODE_PIN] ?: "",
-            requirePinToStopSession = preferences[Keys.STRICT_MODE_REQUIRE_PIN] ?: true
+            requirePinToStopSession = preferences[Keys.STRICT_MODE_REQUIRE_PIN] ?: true,
+            maxPausesPerSession = preferences[Keys.STRICT_MODE_MAX_PAUSES] ?: 3
         )
     }
 
@@ -73,6 +75,7 @@ class PreferenceManager(private val context: Context) {
             it[Keys.STRICT_MODE_PASSAGE] = config.targetPassage
             it[Keys.STRICT_MODE_PIN] = config.unlockPin
             it[Keys.STRICT_MODE_REQUIRE_PIN] = config.requirePinToStopSession
+            it[Keys.STRICT_MODE_MAX_PAUSES] = config.maxPausesPerSession
         }
     }
 

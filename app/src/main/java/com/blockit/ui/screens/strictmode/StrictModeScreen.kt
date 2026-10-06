@@ -333,6 +333,36 @@ fun StrictModeScreen(
                     )
                 }
             }
+
+            // Max Pauses Control
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Max Pauses per Session", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Limit how many times you can pause a blocked app during focus.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0 to "0", 1 to "1", 3 to "3", 5 to "5").forEach { (count, label) ->
+                            FilterChip(
+                                selected = config.maxPausesPerSession == count,
+                                onClick = {
+                                    scope.launch {
+                                        preferenceManager.updateStrictMode(config.copy(maxPausesPerSession = count))
+                                    }
+                                },
+                                label = { Text(if (count == 0) "No pause" else "$label pauses") }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

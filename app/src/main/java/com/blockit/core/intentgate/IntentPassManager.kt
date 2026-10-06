@@ -1,5 +1,6 @@
 package com.blockit.core.intentgate
 
+import com.blockit.domain.model.SessionStrictness
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 
@@ -10,11 +11,20 @@ class IntentPassManager {
     // Daily pass tracking: dayOfYear -> count
     private var lastRecordedDay = -1
     private var passesUsedToday = 0
+    private var maxPauses = 3
 
     companion object {
-        const val MAX_DAILY_PASSES = 3
-        const val DEFAULT_PASS_DURATION_MS = 3 * 60 * 1000L // 3 minutes
+        const val DEFAULT_MAX_PAUSES = 3
+        const val DEFAULT_PASS_DURATION_MS = 5 * 60 * 1000L // 5 minutes default
     }
+
+    @Synchronized
+    fun setMaxPauses(max: Int) {
+        maxPauses = max.coerceAtLeast(0)
+    }
+
+    @Synchronized
+    fun getMaxPauses(): Int = maxPauses
 
     @Synchronized
     private fun checkAndResetDay() {
@@ -34,22 +44,26 @@ class IntentPassManager {
     @Synchronized
     fun getRemainingPassesToday(): Int {
         checkAndResetDay()
-        return (MAX_DAILY_PASSES - passesUsedToday).coerceAtLeast(0)
+        return (maxPauses - passesUsedToday).coerceAtLeast(0)
     }
 
     @Synchronized
-    fun canRequestPass(packageName: String): Boolean {
+    fun canRequestPass(packageName: String, strictness: SessionStrictness = SessionStrictness.NORMAL): Boolean {
+        if (strictness == SessionStrictness.LOCKED) {
+            return false // Locked mode forbids all pauses
+        }
         checkAndResetDay()
         if (hasActivePass(packageName)) return true
-        return passesUsedToday < MAX_DAILY_PASSES
+        return passesUsedToday < maxPauses
     }
 
     @Synchronized
-    fun grantPass(packageName: String, durationMs: Long = DEFAULT_PASS_DURATION_MS): Boolean {
+    fun grantPass(packageName: String, durationMinutes: Int): Boolean {
         checkAndResetDay()
-        if (passesUsedToday >= MAX_DAILY_PASSES && !hasActivePass(packageName)) {
+        if (passesUsedToday >= maxPauses && !hasActivePass(packageName)) {
             return false
         }
+        val durationMs = durationMinutes * 60 * 1000L
         val expiresAt = System.currentTimeMillis() + durationMs
         activePasses[packageName] = expiresAt
         passesUsedToday++

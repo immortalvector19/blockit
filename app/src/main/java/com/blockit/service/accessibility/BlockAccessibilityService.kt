@@ -25,6 +25,7 @@ class BlockAccessibilityService : AccessibilityService() {
     private lateinit var systemAppResolver: com.blockit.core.system.SystemAppResolver
     private var homePackages: Set<String> = emptySet()
     private val lastLoggedBlockTime = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private var currentStrictness = com.blockit.domain.model.SessionStrictness.NORMAL
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -34,6 +35,17 @@ class BlockAccessibilityService : AccessibilityService() {
         appScope = container.applicationScope
         intentPassManager = container.intentPassManager
         systemAppResolver = container.systemAppResolver
+
+        appScope.launch(Dispatchers.Main) {
+            container.preferenceManager.strictModeConfig.collect { config ->
+                currentStrictness = if (config.isEnabled && config.requirePinToStopSession) {
+                    com.blockit.domain.model.SessionStrictness.STRICT
+                } else {
+                    com.blockit.domain.model.SessionStrictness.NORMAL
+                }
+                intentPassManager.setMaxPauses(config.maxPausesPerSession)
+            }
+        }
 
         com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(true)
         com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = {
@@ -255,34 +267,58 @@ class BlockAccessibilityService : AccessibilityService() {
                 return true
             }
 
+            val canPause = intentPassManager.canRequestPass(pkgName, currentStrictness)
+            val remaining = intentPassManager.getRemainingPassesToday()
+            val maxPauses = intentPassManager.getMaxPauses()
+
             overlayController.showBlockOverlay(
                 targetIdentifier = pkgName,
                 profileName = profile,
                 reason = reason,
-                isWhitelistBlock = result.isWhitelistBlock,
-                allowedApps = result.allowedApps,
-                isHardLock = false,
-                canRequestPass = intentPassManager.canRequestPass(pkgName),
-                remainingPasses = intentPassManager.getRemainingPassesToday(),
+                strictness = currentStrictness,
+                canRequestPause = canPause,
+                remainingPauses = remaining,
+                maxPauses = maxPauses,
                 onHomeClicked = {
                     overlayController.hideBlockOverlay()
                     performGlobalAction(GLOBAL_ACTION_HOME)
                 },
-                onOpenAllowedApp = { appPkg ->
+                onGrantPause = { minutes ->
+                    val durationMs = minutes * 60 * 1000L
+                    intentPassManager.grantPass(pkgName, minutes)
                     overlayController.hideBlockOverlay()
-                    val launchIntent = packageManager.getLaunchIntentForPackage(appPkg)
-                    launchIntent?.let {
-                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                        startActivity(it)
+
+                    val appLabel = try {
+                        val appInfo = packageManager.getApplicationInfo(pkgName, 0)
+                        packageManager.getApplicationLabel(appInfo).toString()
+                    } catch (_: Exception) {
+                        pkgName
                     }
-                },
-                onGrantPass = {
-                    intentPassManager.grantPass(pkgName)
-                    overlayController.hideBlockOverlay()
+
+                    overlayController.showPauseCountdownPill(
+                        appName = appLabel,
+                        expiresAtMs = System.currentTimeMillis() + durationMs,
+                        onEndPauseEarly = {
+                            intentPassManager.revokePass(pkgName)
+                            overlayController.hidePauseCountdownPill()
+                            performGlobalAction(GLOBAL_ACTION_HOME)
+                        }
+                    )
+
                     val launchIntent = packageManager.getLaunchIntentForPackage(pkgName)
                     launchIntent?.let {
                         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                         startActivity(it)
+                    }
+
+                    appScope.launch(Dispatchers.Main) {
+                        delay(durationMs)
+                        overlayController.hidePauseCountdownPill()
+                        val root = rootInActiveWindow
+                        val currentFg = root?.packageName?.toString() ?: ""
+                        if (currentFg == pkgName) {
+                            performGlobalAction(GLOBAL_ACTION_HOME)
+                        }
                     }
                 }
             )
@@ -337,6 +373,7 @@ class BlockAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         if (::overlayController.isInitialized) {
             overlayController.hideBlockOverlay()
+            overlayController.hidePauseCountdownPill()
         }
     }
 
@@ -346,6 +383,7 @@ class BlockAccessibilityService : AccessibilityService() {
         com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = null
         if (::overlayController.isInitialized) {
             overlayController.hideBlockOverlay()
+            overlayController.hidePauseCountdownPill()
         }
     }
 }

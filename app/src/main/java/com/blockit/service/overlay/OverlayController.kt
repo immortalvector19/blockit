@@ -11,10 +11,34 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -26,21 +50,21 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.blockit.ui.overlay.BlockScreenContent
+import com.blockit.domain.model.SessionStrictness
 import com.blockit.ui.overlay.BlockOverlayActivity
+import com.blockit.ui.overlay.BlockScreenContent
+import kotlinx.coroutines.delay
 
 data class OverlayData(
     val targetIdentifier: String,
     val profileName: String,
     val reason: String,
-    val isWhitelistBlock: Boolean = false,
-    val allowedApps: List<String> = emptyList(),
-    val isHardLock: Boolean = false,
-    val canRequestPass: Boolean = false,
-    val remainingPasses: Int = 0,
+    val strictness: SessionStrictness = SessionStrictness.NORMAL,
+    val canRequestPause: Boolean = true,
+    val remainingPauses: Int = 3,
+    val maxPauses: Int = 3,
     val onHomeClicked: () -> Unit,
-    val onOpenAllowedApp: ((String) -> Unit)? = null,
-    val onGrantPass: (() -> Unit)? = null
+    val onGrantPause: ((durationMinutes: Int) -> Unit)? = null
 )
 
 class OverlayLifecycleOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
@@ -74,7 +98,10 @@ class OverlayController(private val context: Context) {
     private var overlayView: View? = null
     private var lifecycleOwner: OverlayLifecycleOwner? = null
 
-    private var currentData by mutableStateOf<OverlayData?>(null)
+    private var currentData: OverlayData? = null
+
+    private var pillView: View? = null
+    private var pillLifecycleOwner: OverlayLifecycleOwner? = null
 
     @Volatile
     private var isShowing = false
@@ -83,38 +110,32 @@ class OverlayController(private val context: Context) {
         targetIdentifier: String,
         profileName: String,
         reason: String,
-        isWhitelistBlock: Boolean = false,
-        allowedApps: List<String> = emptyList(),
-        isHardLock: Boolean = false,
-        canRequestPass: Boolean = false,
-        remainingPasses: Int = 0,
+        strictness: SessionStrictness = SessionStrictness.NORMAL,
+        canRequestPause: Boolean = true,
+        remainingPauses: Int = 3,
+        maxPauses: Int = 3,
         onHomeClicked: () -> Unit,
-        onOpenAllowedApp: ((String) -> Unit)? = null,
-        onGrantPass: (() -> Unit)? = null
+        onGrantPause: ((durationMinutes: Int) -> Unit)? = null
     ) {
         val data = OverlayData(
             targetIdentifier = targetIdentifier,
             profileName = profileName,
             reason = reason,
-            isWhitelistBlock = isWhitelistBlock,
-            allowedApps = allowedApps,
-            isHardLock = isHardLock,
-            canRequestPass = canRequestPass,
-            remainingPasses = remainingPasses,
+            strictness = strictness,
+            canRequestPause = canRequestPause,
+            remainingPauses = remainingPauses,
+            maxPauses = maxPauses,
             onHomeClicked = onHomeClicked,
-            onOpenAllowedApp = onOpenAllowedApp,
-            onGrantPass = onGrantPass
+            onGrantPause = onGrantPause
         )
 
         mainHandler.post {
             currentData = data
 
             if (isShowing) {
-                // Overlay already attached to windowManager; Compose will reactively update
                 return@post
             }
 
-            // If SYSTEM_ALERT_WINDOW permission is granted, use instant full-screen Compose overlay
             if (Settings.canDrawOverlays(context)) {
                 try {
                     val themedContext = android.view.ContextThemeWrapper(context, com.blockit.R.style.Theme_BlockIt)
@@ -131,13 +152,12 @@ class OverlayController(private val context: Context) {
                         }
                     }
 
-                    // Attach lifecycle owners to container (the window root view)
                     container.setViewTreeLifecycleOwner(owner)
                     container.setViewTreeViewModelStoreOwner(owner)
                     container.setViewTreeSavedStateRegistryOwner(owner)
 
                     val composeView = ComposeView(themedContext).apply {
-                        setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
+                        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
                         setViewTreeLifecycleOwner(owner)
                         setViewTreeViewModelStoreOwner(owner)
                         setViewTreeSavedStateRegistryOwner(owner)
@@ -148,19 +168,15 @@ class OverlayController(private val context: Context) {
                                     targetIdentifier = active.targetIdentifier,
                                     profileName = active.profileName,
                                     reason = active.reason,
-                                    isWhitelistBlock = active.isWhitelistBlock,
-                                    allowedApps = active.allowedApps,
-                                    isHardLock = active.isHardLock,
-                                    canRequestPass = active.canRequestPass,
-                                    remainingPasses = active.remainingPasses,
+                                    strictness = active.strictness,
+                                    canRequestPause = active.canRequestPause,
+                                    remainingPauses = active.remainingPauses,
+                                    maxPauses = active.maxPauses,
                                     onHomeClicked = {
                                         active.onHomeClicked()
                                     },
-                                    onOpenAllowedApp = { pkg ->
-                                        active.onOpenAllowedApp?.invoke(pkg)
-                                    },
-                                    onGrantPass = {
-                                        active.onGrantPass?.invoke()
+                                    onGrantPause = { minutes ->
+                                        active.onGrantPause?.invoke(minutes)
                                     }
                                 )
                             }
@@ -199,11 +215,9 @@ class OverlayController(private val context: Context) {
                     return@post
                 } catch (e: Exception) {
                     android.util.Log.e("OverlayController", "Failed to add window overlay view", e)
-                    // Fall back to Activity launch if WindowManager addView fails
                 }
             }
 
-            // Fallback: Launch standalone BlockOverlayActivity
             BlockOverlayActivity.start(context, targetIdentifier, profileName, reason)
         }
     }
@@ -223,5 +237,130 @@ class OverlayController(private val context: Context) {
         }
     }
 
+    fun showPauseCountdownPill(
+        appName: String,
+        expiresAtMs: Long,
+        onEndPauseEarly: () -> Unit
+    ) {
+        if (!Settings.canDrawOverlays(context)) return
+
+        mainHandler.post {
+            hidePauseCountdownPill()
+            try {
+                val themedContext = android.view.ContextThemeWrapper(context, com.blockit.R.style.Theme_BlockIt)
+                val owner = OverlayLifecycleOwner()
+                pillLifecycleOwner = owner
+
+                val composeView = ComposeView(themedContext).apply {
+                    setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
+                    setViewTreeLifecycleOwner(owner)
+                    setViewTreeViewModelStoreOwner(owner)
+                    setViewTreeSavedStateRegistryOwner(owner)
+                    setContent {
+                        PauseCountdownPill(
+                            appName = appName,
+                            expiresAtMs = expiresAtMs,
+                            onEndEarly = onEndPauseEarly
+                        )
+                    }
+                }
+
+                val layoutParams = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        WindowManager.LayoutParams.TYPE_PHONE
+                    },
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    PixelFormat.TRANSLUCENT
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                    y = 60
+                }
+
+                windowManager.addView(composeView, layoutParams)
+                pillView = composeView
+            } catch (e: Exception) {
+                android.util.Log.e("OverlayController", "Failed to add pause countdown pill", e)
+            }
+        }
+    }
+
+    fun hidePauseCountdownPill() {
+        mainHandler.post {
+            pillView?.let {
+                try {
+                    windowManager.removeView(it)
+                } catch (_: Exception) {}
+                pillView = null
+            }
+            pillLifecycleOwner?.destroy()
+            pillLifecycleOwner = null
+        }
+    }
+
     fun isOverlayShowing(): Boolean = isShowing
+}
+
+@Composable
+fun PauseCountdownPill(
+    appName: String,
+    expiresAtMs: Long,
+    onEndEarly: () -> Unit
+) {
+    var currentTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            currentTimeMs = System.currentTimeMillis()
+        }
+    }
+
+    val remainingSec = ((expiresAtMs - currentTimeMs) / 1000).coerceAtLeast(0)
+    val mins = remainingSec / 60
+    val secs = remainingSec % 60
+    val timerStr = String.format("%02d:%02d", mins, secs)
+
+    Surface(
+        color = Color(0xF00F172A),
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)),
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Pause,
+                contentDescription = null,
+                tint = Color(0xFF10B981),
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = "$appName: $timerStr",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = Color.White
+            )
+            Text(
+                text = "End",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFFEF4444),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF331B24))
+                    .clickable { onEndEarly() }
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+        }
+    }
 }
