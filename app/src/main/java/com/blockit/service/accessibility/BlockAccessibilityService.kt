@@ -168,7 +168,11 @@ class BlockAccessibilityService : AccessibilityService() {
 
         // Ignore events from our own app, UNLESS the user opened the main settings screen
         if (pkgName == packageName || pkgName.startsWith("com.blockit")) {
-            if (cls.contains("BlockOverlayActivity") || cls.contains("FocusHomeActivity")) {
+            if (cls.contains("FocusHomeActivity")) {
+                currentlyBlockedPackage = null
+                return
+            }
+            if (cls.contains("BlockOverlayActivity")) {
                 return
             }
             if (cls.contains("MainActivity")) {
@@ -309,10 +313,8 @@ class BlockAccessibilityService : AccessibilityService() {
         if (result.isBlocked) {
             val profile = result.profileName ?: "Focus"
             val reason = result.reason ?: "App blocked"
-            currentlyBlockedPackage = pkgName
-            lastBlockedTimestamp = System.currentTimeMillis()
-
             if (result.isWhitelistBlock) {
+                currentlyBlockedPackage = null
                 val focusHomeIntent = Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
@@ -321,6 +323,9 @@ class BlockAccessibilityService : AccessibilityService() {
                 logBlockEvent(pkgName, TargetType.APP, profile)
                 return true
             }
+
+            currentlyBlockedPackage = pkgName
+            lastBlockedTimestamp = System.currentTimeMillis()
 
             val canPause = intentPassManager.canRequestPass(pkgName, currentStrictness)
             val remaining = intentPassManager.getRemainingPassesToday()
