@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,24 +21,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,13 +44,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.blockit.domain.model.SessionStrictness
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusMonolithMark
+import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
+import com.blockit.ui.theme.WarningAmber
 import kotlinx.coroutines.delay
 
 @Composable
@@ -110,24 +104,17 @@ fun BlockScreenContent(
         !isStrict || (strictCooldownSeconds == 0 && typedPhrase.trim().equals(requiredPhrase, ignoreCase = true))
     )
 
-    // Palette: ink dark background with high-contrast text and warm signal green accent
-    val bgInk = Color(0xFF0F172A)
-    val surfaceElevated = Color(0xFF1E293B)
-    val borderDim = Color(0xFF334155)
-    val signalGreen = Color(0xFF10B981)
-    val textPrimary = Color(0xFFF8FAFC)
-    val textMuted = Color(0xFF94A3B8)
-    val alertAmber = Color(0xFFF59E0B)
+    val colors = FocusTheme.colors
 
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = bgInk
+        color = colors.background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(horizontal = FocusSpacing.xl, vertical = FocusSpacing.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -135,41 +122,38 @@ fun BlockScreenContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top Shield Badge
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(surfaceElevated)
-                        .border(1.dp, borderDim, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                // Top Status Tag
+                Surface(
+                    shape = FocusShapes.small,
+                    color = colors.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = null,
-                        tint = signalGreen,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "FocusShield: $profileName",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        ),
-                        color = textPrimary
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = FocusSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                    ) {
+                        FocusMonolithMark(
+                            size = 16.dp,
+                            tint = colors.accent
+                        )
+                        Text(
+                            text = if (profileName.isNotBlank()) "$profileName is active" else "Focus session active",
+                            style = FocusTypography.label,
+                            color = colors.textPrimary
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(36.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.xxl))
 
                 // App Icon Box
                 Box(
                     modifier = Modifier
-                        .size(76.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(surfaceElevated)
-                        .border(1.dp, borderDim, RoundedCornerShape(20.dp)),
+                        .size(72.dp)
+                        .clip(FocusShapes.medium)
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, FocusShapes.medium),
                     contentAlignment = Alignment.Center
                 ) {
                     if (targetAppIcon != null) {
@@ -180,39 +164,36 @@ fun BlockScreenContent(
                         )
                     } else {
                         Icon(
-                            imageVector = Icons.Default.HourglassTop,
+                            imageVector = Icons.Rounded.HourglassTop,
                             contentDescription = null,
-                            tint = alertAmber,
-                            modifier = Modifier.size(36.dp)
+                            tint = WarningAmber,
+                            modifier = Modifier.size(32.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
                 // Target App Name
                 Text(
                     text = targetAppName,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.5).sp
-                    ),
-                    color = textPrimary,
+                    style = FocusTypography.headline,
+                    color = colors.textPrimary,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
                 Text(
-                    text = reason.ifBlank { "App is blocked by $profileName" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textMuted,
+                    text = reason.ifBlank { "This app is restricted by $profileName" },
+                    style = FocusTypography.body,
+                    color = colors.textSecondary,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.xl))
 
                 // If user opened Pause picker
                 AnimatedVisibility(
@@ -220,214 +201,167 @@ fun BlockScreenContent(
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
-                    Card(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, borderDim, RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(containerColor = surfaceElevated),
-                        shape = RoundedCornerShape(16.dp)
+                            .clip(FocusShapes.medium)
+                            .border(1.dp, colors.border, FocusShapes.medium),
+                        color = colors.surface,
+                        shape = FocusShapes.medium
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(18.dp),
+                                .padding(FocusSpacing.lg),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Take a Temporary Pause",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = textPrimary
+                                text = "Take a temporary pause",
+                                style = FocusTypography.title,
+                                color = colors.textPrimary
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(FocusSpacing.xxs))
 
                             Text(
                                 text = "$remainingPauses of $maxPauses pauses remaining in this session",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textMuted
+                                style = FocusTypography.caption,
+                                color = colors.textSecondary
                             )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(FocusSpacing.md))
 
                             // Minute Choices: 1, 5, 10, 15
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
+                                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                             ) {
                                 minuteChoices.forEach { minutes ->
                                     val isSelected = selectedMinutes == minutes
-                                    FilterChip(
-                                        selected = isSelected,
+                                    Surface(
                                         onClick = { selectedMinutes = minutes },
-                                        label = {
-                                            Text(
-                                                text = "$minutes min",
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = signalGreen,
-                                            selectedLabelColor = Color(0xFF0F172A),
-                                            containerColor = Color(0xFF0F172A),
-                                            labelColor = textPrimary
+                                        shape = FocusShapes.small,
+                                        color = if (isSelected) colors.accent else colors.surfaceVariant,
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isSelected) colors.accent else colors.border
                                         ),
-                                        shape = RoundedCornerShape(10.dp)
-                                    )
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(vertical = FocusSpacing.sm),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "${minutes}m",
+                                                style = FocusTypography.label,
+                                                color = if (isSelected) Color.White else colors.textPrimary
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
                             if (isStrict) {
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(FocusSpacing.md))
 
                                 if (strictCooldownSeconds > 0) {
                                     Text(
-                                        text = "Strict reflection cooldown: wait $strictCooldownSeconds seconds.",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                        color = alertAmber
+                                        text = "Strict cooldown: wait $strictCooldownSeconds seconds.",
+                                        style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                                        color = WarningAmber
                                     )
                                 } else {
                                     Text(
-                                        text = "Type phrase below to confirm pause:",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = textPrimary
+                                        text = "Type phrase below to confirm:",
+                                        style = FocusTypography.caption,
+                                        color = colors.textPrimary
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = requiredPhrase,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontFamily = FontFamily.Monospace,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = signalGreen
+                                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = colors.accent
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(FocusSpacing.xs))
                                     OutlinedTextField(
                                         value = typedPhrase,
                                         onValueChange = { typedPhrase = it },
-                                        placeholder = { Text(requiredPhrase, fontSize = 12.sp) },
+                                        placeholder = { Text(requiredPhrase) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = FocusShapes.small
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
                             ) {
-                                OutlinedButton(
+                                FocusOutlinedButton(
+                                    text = "Cancel",
                                     onClick = { isPausePickerOpen = false },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text("Cancel", color = textMuted)
-                                }
+                                    modifier = Modifier.weight(1f)
+                                )
 
-                                Button(
+                                FocusButton(
+                                    text = if (isStrict && strictCooldownSeconds > 0) {
+                                        "${strictCooldownSeconds}s"
+                                    } else {
+                                        "Confirm ($selectedMinutes min)"
+                                    },
                                     onClick = {
                                         if (canConfirmPause && onGrantPause != null) {
                                             onGrantPause(selectedMinutes)
                                         }
                                     },
                                     enabled = canConfirmPause,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = signalGreen,
-                                        contentColor = Color(0xFF0F172A),
-                                        disabledContainerColor = borderDim,
-                                        disabledContentColor = textMuted
-                                    )
-                                ) {
-                                    Text(
-                                        text = if (isStrict && strictCooldownSeconds > 0) {
-                                            "${strictCooldownSeconds}s"
-                                        } else {
-                                            "Confirm ($selectedMinutes min)"
-                                        },
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Bottom Actions: "Go Home" and "Pause"
+            // Bottom Actions: "Go home" and "Pause"
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(top = FocusSpacing.xl),
+                verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Primary Action 1: "Go home"
-                Button(
+                FocusButton(
+                    text = "Go home",
+                    leadingIcon = Icons.Rounded.Home,
                     onClick = onHomeClicked,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = signalGreen,
-                        contentColor = Color(0xFF0F172A)
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Go Home",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 // Primary Action 2: "Pause" button
                 if (!isPausePickerOpen) {
                     val pauseButtonText = when {
-                        isLocked -> "Pauses Disabled (Locked Session)"
-                        remainingPauses <= 0 -> "No Pauses Remaining"
-                        else -> "Pause App"
+                        isLocked -> "Pauses disabled in locked mode"
+                        remainingPauses <= 0 -> "No pauses remaining"
+                        else -> "Pause"
                     }
 
-                    OutlinedButton(
+                    FocusOutlinedButton(
+                        text = pauseButtonText,
+                        leadingIcon = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.Pause,
                         onClick = {
                             if (!isLocked && remainingPauses > 0) {
                                 isPausePickerOpen = true
                             }
                         },
                         enabled = !isLocked && remainingPauses > 0,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = textPrimary,
-                            disabledContentColor = textMuted
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (!isLocked && remainingPauses > 0) borderDim else borderDim.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Icon(
-                            imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.Pause,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = pauseButtonText,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                        )
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }

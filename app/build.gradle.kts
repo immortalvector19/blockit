@@ -64,6 +64,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -80,6 +81,12 @@ android {
 dependencies {
     // Core Kotlin extensions for Android system APIs
     implementation("androidx.core:core-ktx:1.12.0")
+
+    // Official Android 12+ Splash Screen API for seamless zero-flicker startup
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // Baseline Profile installer for ahead-of-time (AOT) app startup optimization
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 
     // Lifecycle aware scopes and Coroutine support
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")

@@ -64,15 +64,30 @@ class AppsPickerViewModel(
     )
 
     init {
+        val cached = installedAppsRepo.getCachedAppsSync()
+        if (cached != null && cached.isNotEmpty()) {
+            _allApps.value = cached
+            _isLoading.value = false
+        }
         loadInstalledApps()
+        loadSelectedAppsForProfile()
     }
 
     private fun loadInstalledApps() {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (_allApps.value.isEmpty()) {
+                _isLoading.value = true
+            }
             val apps = installedAppsRepo.getInstalledApps()
             _allApps.value = apps
             _isLoading.value = false
+        }
+    }
+
+    private fun loadSelectedAppsForProfile() {
+        viewModelScope.launch {
+            val existing = profileRepo.getAppsForProfile(profileId)
+            _selectedPackages.value = existing.map { it.packageName }.toSet()
         }
     }
 
@@ -106,10 +121,8 @@ class AppsPickerViewModel(
     fun saveSelectedApps(onComplete: () -> Unit) {
         viewModelScope.launch {
             val selected = _allApps.value.filter { _selectedPackages.value.contains(it.packageName) }
-            if (selected.isNotEmpty()) {
-                profileRepo.addAppsToProfile(profileId, selected)
-                evaluator.refreshRules()
-            }
+            profileRepo.syncAppsForProfile(profileId, selected)
+            evaluator.refreshRules()
             onComplete()
         }
     }

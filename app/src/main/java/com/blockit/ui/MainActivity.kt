@@ -18,19 +18,21 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.blockit.domain.model.AccentTheme
 import com.blockit.domain.model.ThemeMode
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         val container = BlockItApplication.from(this)
         checkWhitelistLockdown(container)
 
         setContent {
             val themeMode by container.preferenceManager.themeMode.collectAsState(initial = ThemeMode.LIGHT)
-            val accentTheme by container.preferenceManager.accentTheme.collectAsState(initial = AccentTheme.ORANGE)
+            val accentTheme by container.preferenceManager.accentTheme.collectAsState(initial = AccentTheme.DEFAULT)
 
             val isSystemDark = isSystemInDarkTheme()
             val isDark = when (themeMode) {
@@ -40,7 +42,7 @@ class MainActivity : ComponentActivity() {
             }
 
             SideEffect {
-                val windowBg = if (isDark) "#191817" else "#ECEBE6"
+                val windowBg = if (isDark) "#121316" else "#F8F9FA"
                 window.decorView.setBackgroundColor(Color.parseColor(windowBg))
             }
 

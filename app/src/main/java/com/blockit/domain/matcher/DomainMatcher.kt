@@ -43,6 +43,11 @@ object DomainMatcher {
             trimmed = trimmed.substring(0, trimmed.length - 1)
         }
 
+        // Strip www. prefix if present
+        if (trimmed.startsWith("www.")) {
+            trimmed = trimmed.substring(4)
+        }
+
         return trimmed
     }
 

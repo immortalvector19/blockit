@@ -12,22 +12,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 
+interface BoundaryAlarmScheduler {
+    suspend fun scheduleNextBoundaryAlarm()
+}
+
 class ScheduleManager(
     private val context: Context,
     private val database: BlockItDatabase
-) {
+) : BoundaryAlarmScheduler {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     /**
      * Re-calculates and schedules the next exact boundary alarm for active schedules and focus sessions.
      */
-    suspend fun scheduleNextBoundaryAlarm() = withContext(Dispatchers.IO) {
+    override suspend fun scheduleNextBoundaryAlarm() = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val calendar = Calendar.getInstance().apply { timeInMillis = now }
 
         val activeSchedules = database.scheduleDao().getAllActiveSchedules()
         val activeSessions = database.focusSessionDao().getActiveSessions(now)
+        val scheduleProfiles = database.profileDao().getEnabledProfiles().filter { it.profileType == "SCHEDULE" }
 
         var earliestBoundaryMs = Long.MAX_VALUE
 
@@ -39,10 +44,21 @@ class ScheduleManager(
         }
 
         // 2. Check upcoming schedule transitions (start & end)
-        val currentMinute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
         for (schedule in activeSchedules) {
             val startMs = getNextTimestampForMinute(schedule.startMinuteOfDay, calendar)
             val endMs = getNextTimestampForMinute(schedule.endMinuteOfDay, calendar)
+
+            if (startMs in (now + 1000) until earliestBoundaryMs) {
+                earliestBoundaryMs = startMs
+            }
+            if (endMs in (now + 1000) until earliestBoundaryMs) {
+                earliestBoundaryMs = endMs
+            }
+        }
+
+        for (profile in scheduleProfiles) {
+            val startMs = getNextTimestampForMinute(profile.scheduleStartMinute, calendar)
+            val endMs = getNextTimestampForMinute(profile.scheduleEndMinute, calendar)
 
             if (startMs in (now + 1000) until earliestBoundaryMs) {
                 earliestBoundaryMs = startMs

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -49,6 +50,13 @@ class MainDashboardViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
+        )
+
+    val activeRuleSnapshot: StateFlow<com.blockit.domain.evaluator.ActiveRuleSnapshot> = ruleEvaluator.snapshotFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ruleEvaluator.getSnapshot()
         )
 
     val strictModeConfig: StateFlow<StrictModeConfig> = preferenceManager.strictModeConfig
@@ -97,12 +105,16 @@ class MainDashboardViewModel(
         }
     }
 
+    private val _isProfilesLoading = MutableStateFlow(true)
+    val isProfilesLoading: StateFlow<Boolean> = _isProfilesLoading.asStateFlow()
+
     private val _selectedProfileId = MutableStateFlow<Long?>(null)
     val selectedProfileId: StateFlow<Long?> = _selectedProfileId.asStateFlow()
 
     init {
         viewModelScope.launch {
             profiles.collect { list ->
+                _isProfilesLoading.value = false
                 if (_selectedProfileId.value == null && list.isNotEmpty()) {
                     _selectedProfileId.value = list.first().id
                 }
@@ -118,16 +130,19 @@ class MainDashboardViewModel(
         if (id == null) flowOf(emptyList()) else profileRepository.observeAppsForProfile(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allProfileApps: StateFlow<Map<Long, List<BlockedApp>>> = profileRepository.observeAllBlockedApps()
+        .map { list -> list.groupBy { it.profileId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val packedDomains: StateFlow<List<BlockedDomain>> = _selectedProfileId.flatMapLatest { id ->
         if (id == null) flowOf(emptyList()) else profileRepository.observeDomainsForProfile(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val schedules: StateFlow<List<Schedule>> = _selectedProfileId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else profileRepository.observeSchedulesForProfile(id)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val schedules: StateFlow<List<Schedule>> = profileRepository.observeAllSchedules()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun startSession(profileId: Long, durationMinutes: Int) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             focusSessionManager.startSession(profileId, durationMinutes)
             ruleEvaluator.refreshRules()
             scheduleManager.scheduleNextBoundaryAlarm()
@@ -135,7 +150,7 @@ class MainDashboardViewModel(
     }
 
     fun endSession(sessionId: Long) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             focusSessionManager.endSession(sessionId)
             ruleEvaluator.refreshRules()
             scheduleManager.scheduleNextBoundaryAlarm()
@@ -157,11 +172,44 @@ class MainDashboardViewModel(
         }
     }
 
-    fun createProfile(name: String, mode: BlockMode) {
+    fun createProfile(
+        name: String,
+        profileType: com.blockit.domain.model.ProfileType = com.blockit.domain.model.ProfileType.FOCUS,
+        listType: com.blockit.domain.model.ListType = com.blockit.domain.model.ListType.BLOCKLIST,
+        daysMask: Int = 127,
+        startMinute: Int = 540,
+        endMinute: Int = 1020
+    ) {
         viewModelScope.launch {
-            val id = profileRepository.createProfile(name = name, blockMode = mode)
+            val id = profileRepository.createProfile(
+                name = name,
+                profileType = profileType,
+                listType = listType,
+                daysMask = daysMask,
+                startMinute = startMinute,
+                endMinute = endMinute
+            )
             _selectedProfileId.value = id
             ruleEvaluator.refreshRules()
+            scheduleManager.scheduleNextBoundaryAlarm()
+        }
+    }
+
+    fun createProfile(name: String, mode: BlockMode) {
+        val lType = if (mode == BlockMode.WHITELIST) com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
+        createProfile(name = name, profileType = com.blockit.domain.model.ProfileType.FOCUS, listType = lType)
+    }
+
+    fun updateProfileSchedule(
+        profileId: Long,
+        daysMask: Int,
+        startMinute: Int,
+        endMinute: Int
+    ) {
+        viewModelScope.launch {
+            profileRepository.updateProfileSchedule(profileId, daysMask, startMinute, endMinute)
+            ruleEvaluator.refreshRules()
+            scheduleManager.scheduleNextBoundaryAlarm()
         }
     }
 

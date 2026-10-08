@@ -26,7 +26,7 @@ class ThemeSettingsViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = AccentTheme.ORANGE
+            initialValue = AccentTheme.DEFAULT
         )
 
     fun setThemeMode(mode: ThemeMode) {

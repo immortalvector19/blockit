@@ -15,8 +15,10 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,34 +29,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccessibilityNew
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.BatteryChargingFull
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.QueryBuilder
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.VpnKey
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.rounded.AccessibilityNew
+import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.QueryBuilder
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -63,16 +54,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.blockit.service.admin.BlockItDeviceAdminReceiver
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusSectionHeader
+import com.blockit.ui.components.FocusTopBar
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetupGuideScreen(
     onBackClick: () -> Unit,
@@ -80,8 +77,8 @@ fun SetupGuideScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val colors = FocusTheme.colors
 
-    // Live permission states updated on resume
     var isAccessibilityGranted by remember { mutableStateOf(checkAccessibility(context)) }
     var isOverlayGranted by remember { mutableStateOf(checkOverlay(context)) }
     var isVpnGranted by remember { mutableStateOf(checkVpn(context)) }
@@ -118,20 +115,11 @@ fun SetupGuideScreen(
 
     Scaffold(
         modifier = modifier,
+        containerColor = colors.background,
         topBar = {
-            TopAppBar(
-                title = { Text("Permissions & Setup Guide") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+            FocusTopBar(
+                title = "Setup guide",
+                onBackClick = onBackClick
             )
         }
     ) { padding ->
@@ -140,28 +128,24 @@ fun SetupGuideScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(FocusSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(FocusSpacing.lg)
         ) {
-            // Header
+            FocusSectionHeader(title = "Required permissions")
+
             Text(
-                text = "Required Permissions",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "FocusShield runs completely on-device without internet access. Because it is sideloaded for personal use, it utilizes Android's most effective system APIs to guarantee reliable blocking.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "FocusShield runs completely on-device without internet access. Granting these system permissions ensures reliable blocking without battery drain.",
+                style = FocusTypography.body,
+                color = colors.textSecondary
             )
 
             // 1. Accessibility Service
             PermissionCard(
-                title = "Accessibility Service",
-                description = "Detects foreground app switches instantly and reads browser URL bars to intercept distracting websites.",
+                title = "Accessibility service",
+                description = "Detects app switches instantly and reads browser address bars to intercept blocked domains.",
                 isGranted = isAccessibilityGranted,
-                icon = Icons.Default.AccessibilityNew,
-                buttonText = "Open Accessibility Settings",
+                icon = Icons.Rounded.AccessibilityNew,
+                buttonText = "Open accessibility settings",
                 onConfigure = {
                     val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -170,13 +154,13 @@ fun SetupGuideScreen(
                 }
             )
 
-            // 2. Draw Over Apps (Overlay)
+            // 2. Overlay
             PermissionCard(
-                title = "Display Over Other Apps",
-                description = "Renders the full-screen blocking overlay over distracting apps without delay.",
+                title = "Display over other apps",
+                description = "Shows the full-screen pause view over blocked apps without delay.",
                 isGranted = isOverlayGranted,
-                icon = Icons.Default.Layers,
-                buttonText = "Grant Overlay Permission",
+                icon = Icons.Rounded.Layers,
+                buttonText = "Grant overlay permission",
                 onConfigure = {
                     com.blockit.core.permission.PermissionIntents.launchOverlaySettings(context)
                 }
@@ -184,11 +168,11 @@ fun SetupGuideScreen(
 
             // 3. Local VPN Filter
             PermissionCard(
-                title = "On-Device DNS Filter (VPN)",
-                description = "Filters DNS port 53 packets entirely on your device (localhost) to block distracting domains across all apps and browsers. Zero internet traffic is sent to external servers.",
+                title = "On-device DNS filter",
+                description = "Filters DNS requests locally on your device to block domains across all apps and browsers. Zero traffic leaves the phone.",
                 isGranted = isVpnGranted,
-                icon = Icons.Default.VpnKey,
-                buttonText = "Authorize Local VPN",
+                icon = Icons.Rounded.VpnKey,
+                buttonText = "Authorize local VPN",
                 onConfigure = {
                     val intent = VpnService.prepare(context)
                     if (intent != null) {
@@ -201,11 +185,11 @@ fun SetupGuideScreen(
 
             // 4. Usage Access
             PermissionCard(
-                title = "Usage Access (Fallback)",
-                description = "Secondary fallback mechanism to detect foreground applications if the accessibility service is ever restarted by the system.",
+                title = "Usage access",
+                description = "Secondary fallback mechanism to detect foreground apps if accessibility is temporarily interrupted.",
                 isGranted = isUsageAccessGranted,
-                icon = Icons.Default.QueryBuilder,
-                buttonText = "Grant Usage Access",
+                icon = Icons.Rounded.QueryBuilder,
+                buttonText = "Grant usage access",
                 onConfigure = {
                     val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -216,11 +200,11 @@ fun SetupGuideScreen(
 
             // 5. Battery Optimization Exemption
             PermissionCard(
-                title = "Battery Optimization Exemption",
-                description = "Prevents Android Doze mode and OS battery killers from terminating FocusShield when the screen is locked.",
+                title = "Battery optimization exemption",
+                description = "Prevents Android battery management from stopping FocusShield when the screen is locked.",
                 isGranted = isBatteryOptExempt,
-                icon = Icons.Default.BatteryChargingFull,
-                buttonText = "Disable Battery Optimization",
+                icon = Icons.Rounded.BatteryChargingFull,
+                buttonText = "Disable battery optimization",
                 onConfigure = {
                     com.blockit.core.permission.PermissionIntents.launchBatteryExemption(context)
                 }
@@ -229,11 +213,11 @@ fun SetupGuideScreen(
             // 6. Exact Alarms
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 PermissionCard(
-                    title = "Exact Alarms",
-                    description = "Guarantees recurring schedule start and end boundaries activate at the exact second without system drift.",
+                    title = "Exact alarms",
+                    description = "Ensures scheduled routines trigger at the exact second without system drift.",
                     isGranted = isExactAlarmGranted,
-                    icon = Icons.Default.Alarm,
-                    buttonText = "Allow Exact Alarms",
+                    icon = Icons.Rounded.Alarm,
+                    buttonText = "Allow exact alarms",
                     onConfigure = {
                         val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -245,18 +229,18 @@ fun SetupGuideScreen(
 
             // 7. Device Admin
             PermissionCard(
-                title = "Device Admin (Optional Anti-Uninstall)",
-                description = "Prevents uninstalling FocusShield from the launcher while an active focus session is locked.",
+                title = "Device admin (optional)",
+                description = "Prevents uninstallation while a focus session is active.",
                 isGranted = isDeviceAdminGranted,
-                icon = Icons.Default.Security,
-                buttonText = "Activate Device Admin",
+                icon = Icons.Rounded.Security,
+                buttonText = "Activate device admin",
                 onConfigure = {
                     val adminComponent = ComponentName(context, BlockItDeviceAdminReceiver::class.java)
                     val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
                         putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
                         putExtra(
                             DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                            "Enable Device Admin to prevent uninstalling FocusShield during active focus sessions."
+                            "Enable device admin to prevent uninstalling FocusShield during active focus sessions."
                         )
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
@@ -264,26 +248,20 @@ fun SetupGuideScreen(
                 }
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            FocusSectionHeader(title = "Manufacturer background settings")
 
-            // OEM Optimization Section
             Text(
-                text = "OEM Background Guides",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "Aggressive battery managers on Samsung, Xiaomi, and OnePlus may kill background services unless configured properly. Follow the instructions for your device:",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Aggressive battery savers on Samsung, Xiaomi, or OnePlus devices may terminate background services. Follow the steps for your device:",
+                style = FocusTypography.body,
+                color = colors.textSecondary
             )
 
             OemGuideCard(
                 brand = "Samsung (One UI)",
                 steps = listOf(
                     "Settings > Apps > FocusShield > Battery -> Select 'Unrestricted'",
-                    "Settings > Battery > Background usage limits > 'Never auto sleeping apps' -> Tap '+' and add FocusShield",
-                    "Settings > Battery > More battery settings -> Turn OFF 'Put unused apps to sleep'"
+                    "Settings > Battery > Background usage limits > 'Never auto sleeping apps' -> Add FocusShield",
+                    "Settings > Battery > More battery settings -> Turn off 'Put unused apps to sleep'"
                 )
             )
 
@@ -293,12 +271,12 @@ fun SetupGuideScreen(
                     "Long-press FocusShield icon > App Info > Enable 'Autostart'",
                     "In App Info > Battery saver -> Select 'No restrictions'",
                     "Security app > Manage apps > Permissions > Autostart -> Enable FocusShield",
-                    "Open Recent Apps screen, pull down on the FocusShield preview, and tap the Lock icon"
+                    "Open Recent Apps screen, pull down on FocusShield, and tap the Lock icon"
                 )
             )
 
             OemGuideCard(
-                brand = "OnePlus / OPPO / Realme (OxygenOS / ColorOS)",
+                brand = "OnePlus / OPPO / Realme",
                 steps = listOf(
                     "Settings > Apps > App management > FocusShield > Battery usage",
                     "Enable both 'Allow background activity' and 'Allow auto-launch'"
@@ -306,15 +284,7 @@ fun SetupGuideScreen(
             )
 
             OemGuideCard(
-                brand = "Huawei / Honor (EMUI / MagicOS)",
-                steps = listOf(
-                    "Settings > Battery > App launch > Find FocusShield",
-                    "Turn OFF 'Manage automatically' and enable: Auto-launch, Secondary launch, and Run in background"
-                )
-            )
-
-            OemGuideCard(
-                brand = "Google Pixel & Stock Android",
+                brand = "Google Pixel & stock Android",
                 steps = listOf(
                     "Settings > Apps > FocusShield > App battery usage -> Select 'Unrestricted'"
                 )
@@ -332,15 +302,16 @@ private fun PermissionCard(
     buttonText: String,
     onConfigure: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isGranted) MaterialTheme.colorScheme.surface
-            else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-        ),
-        shape = RoundedCornerShape(12.dp)
+    val colors = FocusTheme.colors
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, colors.divider, FocusShapes.medium),
+        shape = FocusShapes.medium,
+        color = colors.surface
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(FocusSpacing.md)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -348,43 +319,49 @@ private fun PermissionCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Warning,
-                    contentDescription = if (isGranted) "Granted" else "Needed",
-                    tint = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    tint = if (isGranted) colors.accent else colors.textSecondary,
                     modifier = Modifier.size(20.dp)
                 )
+                Spacer(modifier = Modifier.width(FocusSpacing.sm))
+                Text(
+                    text = title,
+                    style = FocusTypography.bodyBold,
+                    color = colors.textPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isGranted) colors.accent else colors.textMuted.copy(alpha = 0.3f),
+                        modifier = Modifier.size(8.dp)
+                    ) {}
+                    Text(
+                        text = if (isGranted) "Granted" else "Needs setup",
+                        style = FocusTypography.caption,
+                        color = if (isGranted) colors.accent else colors.textSecondary
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
             Text(
                 text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = FocusTypography.caption,
+                color = colors.textSecondary
             )
 
             if (!isGranted) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
+                FocusButton(
+                    text = buttonText,
                     onClick = onConfigure,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    ),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(buttonText)
-                }
+                )
             }
         }
     }
@@ -396,42 +373,43 @@ private fun OemGuideCard(
     steps: List<String>
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val colors = FocusTheme.colors
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .border(1.dp, colors.divider, FocusShapes.medium)
             .clickable { expanded = !expanded },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(10.dp)
+        shape = FocusShapes.medium,
+        color = colors.surface
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(FocusSpacing.md)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = brand,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = FocusTypography.bodyBold,
+                    color = colors.textPrimary,
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
             AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.padding(top = 10.dp)) {
+                Column(modifier = Modifier.padding(top = FocusSpacing.sm)) {
                     steps.forEachIndexed { index, step ->
                         Text(
                             text = "${index + 1}. $step",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 3.dp)
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(vertical = 2.dp)
                         )
                     }
                 }
@@ -440,7 +418,6 @@ private fun OemGuideCard(
     }
 }
 
-// Helper permission checking functions
 private fun checkAccessibility(context: Context): Boolean {
     val enabledServices = Settings.Secure.getString(
         context.contentResolver,

@@ -50,9 +50,29 @@ class ProfilesViewModel(
         }
     }
 
-    fun createProfile(name: String, colorHex: Long = 0xFF6366F1, iconKey: String = "focus", blockMode: com.blockit.domain.model.BlockMode = com.blockit.domain.model.BlockMode.BLACKLIST) {
+    fun createProfile(
+        name: String,
+        colorHex: Long = 0xFF2563EB,
+        iconKey: String = "focus",
+        profileType: com.blockit.domain.model.ProfileType = com.blockit.domain.model.ProfileType.FOCUS,
+        listType: com.blockit.domain.model.ListType = com.blockit.domain.model.ListType.BLOCKLIST,
+        daysMask: Int = 127,
+        startMinute: Int = 540,
+        endMinute: Int = 1020,
+        blockMode: com.blockit.domain.model.BlockMode = if (listType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST
+    ) {
         viewModelScope.launch {
-            profileRepository.createProfile(name, colorHex, iconKey, blockMode)
+            profileRepository.createProfile(
+                name = name,
+                colorHex = colorHex,
+                iconKey = iconKey,
+                profileType = profileType,
+                listType = listType,
+                daysMask = daysMask,
+                startMinute = startMinute,
+                endMinute = endMinute,
+                blockMode = blockMode
+            )
             ruleEvaluator.refreshRules()
         }
     }

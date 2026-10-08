@@ -8,23 +8,27 @@ import com.blockit.domain.model.InstalledAppInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class InstalledAppsRepository(private val context: Context) {
+open class InstalledAppsRepository(protected val context: Context? = null) {
 
+    @Volatile
     private var cachedApps: List<InstalledAppInfo>? = null
+
+    fun getCachedAppsSync(): List<InstalledAppInfo>? = cachedApps
 
     suspend fun getInstalledApps(forceRefresh: Boolean = false): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
         if (!forceRefresh && cachedApps != null) {
             return@withContext cachedApps!!
         }
 
-        val pm = context.packageManager
+        val ctx = context ?: return@withContext emptyList()
+        val pm = ctx.packageManager
         val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
 
         // Query all activities that can be launched by user
         val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-        val selfPackage = context.packageName
+        val selfPackage = ctx.packageName
 
         val apps = resolveInfos.mapNotNull { resolveInfo ->
             val appInfo = resolveInfo.activityInfo.applicationInfo
@@ -48,9 +52,10 @@ class InstalledAppsRepository(private val context: Context) {
         apps
     }
 
-    fun resolveAppName(packageName: String): String {
+    open fun resolveAppName(packageName: String): String {
+        val ctx = context ?: return packageName
         return try {
-            val pm = context.packageManager
+            val pm = ctx.packageManager
             val appInfo = pm.getApplicationInfo(packageName, 0)
             pm.getApplicationLabel(appInfo).toString().ifBlank { packageName }
         } catch (_: Exception) {

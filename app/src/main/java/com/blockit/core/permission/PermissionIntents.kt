@@ -12,7 +12,36 @@ import android.util.Log
 object PermissionIntents {
     private const val TAG = "PermissionIntents"
 
+    fun getAccessibilityEngineStatus(context: Context): com.blockit.core.engine.AccessibilityEngineStatus {
+        val enabledServices = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        val expected = "${context.packageName}/com.blockit.service.accessibility.BlockAccessibilityService"
+        val isConfiguredInSettings = enabledServices.contains(expected)
+
+        if (!isConfiguredInSettings) {
+            com.blockit.core.engine.EngineLifecycleMonitor.updateEngineStatus(
+                com.blockit.core.engine.AccessibilityEngineStatus.NOT_ENABLED
+            )
+            return com.blockit.core.engine.AccessibilityEngineStatus.NOT_ENABLED
+        }
+
+        val isConnected = com.blockit.service.accessibility.BlockAccessibilityService.isServiceConnected
+        val status = if (isConnected) {
+            com.blockit.core.engine.AccessibilityEngineStatus.CONNECTED
+        } else {
+            com.blockit.core.engine.AccessibilityEngineStatus.ENABLED_NOT_CONNECTED
+        }
+        com.blockit.core.engine.EngineLifecycleMonitor.updateEngineStatus(status)
+        return status
+    }
+
     fun isAccessibilityServiceEnabled(context: Context): Boolean {
+        return getAccessibilityEngineStatus(context) == com.blockit.core.engine.AccessibilityEngineStatus.CONNECTED
+    }
+
+    fun isAccessibilityConfiguredInSettings(context: Context): Boolean {
         val enabledServices = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES

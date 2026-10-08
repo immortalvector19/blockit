@@ -1,5 +1,15 @@
 package com.blockit.domain.model
  
+enum class ProfileType {
+    FOCUS,
+    SCHEDULE
+}
+
+enum class ListType {
+    BLOCKLIST,
+    ALLOWLIST
+}
+
 enum class BlockMode {
     BLACKLIST,
     WHITELIST
@@ -8,10 +18,15 @@ enum class BlockMode {
 data class Profile(
     val id: Long = 0,
     val name: String,
-    val colorHex: Long = 0xFF6200EE,
+    val colorHex: Long = 0xFF2563EB,
     val iconKey: String = "focus",
     val isEnabled: Boolean = true,
-    val blockMode: BlockMode = BlockMode.BLACKLIST,
+    val profileType: ProfileType = ProfileType.FOCUS,
+    val listType: ListType = ListType.BLOCKLIST,
+    val scheduleDaysMask: Int = 127,
+    val scheduleStartMinute: Int = 540,
+    val scheduleEndMinute: Int = 1020,
+    val blockMode: BlockMode = if (listType == ListType.ALLOWLIST) BlockMode.WHITELIST else BlockMode.BLACKLIST,
     val createdAt: Long = System.currentTimeMillis(),
     val appCount: Int = 0,
     val domainCount: Int = 0
@@ -97,10 +112,14 @@ enum class ThemeMode {
 }
 
 enum class AccentTheme(val displayName: String, val primaryColorHex: Long) {
-    ORANGE("Mechanical Orange", 0xFFFF5520),
-    GREEN("Terminal Emerald", 0xFF10B981),
-    BLUE("Blueprint Cyan", 0xFF0284C7),
-    PURPLE("Cyber Violet", 0xFF8B5CF6),
-    AMBER("Analog Amber", 0xFFD97706)
+    BLUE("Blue", 0xFF2563EB),
+    GREEN("Green", 0xFF059669),
+    PURPLE("Purple", 0xFF7C3AED),
+    AMBER("Amber", 0xFFD97706),
+    SLATE("Slate", 0xFF475569);
+
+    companion object {
+        val DEFAULT = BLUE
+    }
 }
 

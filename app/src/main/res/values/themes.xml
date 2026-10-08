@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.BlockIt.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#F8FAFC</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_focus_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.BlockIt</item>
+    </style>
+
     <style name="Theme.BlockIt" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#ECEBE6</item>
         <item name="android:colorBackground">#ECEBE6</item>

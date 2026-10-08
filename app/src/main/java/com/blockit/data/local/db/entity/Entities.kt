@@ -15,6 +15,11 @@ data class ProfileEntity(
     val iconKey: String,
     val isEnabled: Boolean,
     val blockMode: String = "BLACKLIST",
+    val profileType: String = "FOCUS",
+    val listType: String = "BLOCKLIST",
+    val scheduleDaysMask: Int = 127,
+    val scheduleStartMinute: Int = 540,
+    val scheduleEndMinute: Int = 1020,
     val createdAt: Long
 )
 

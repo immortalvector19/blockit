@@ -104,10 +104,10 @@ class PreferenceManager(private val context: Context) {
     val accentTheme: Flow<com.blockit.domain.model.AccentTheme> = context.dataStore.data.map { preferences ->
         try {
             com.blockit.domain.model.AccentTheme.valueOf(
-                preferences[Keys.ACCENT_THEME] ?: com.blockit.domain.model.AccentTheme.ORANGE.name
+                preferences[Keys.ACCENT_THEME] ?: com.blockit.domain.model.AccentTheme.DEFAULT.name
             )
         } catch (_: Exception) {
-            com.blockit.domain.model.AccentTheme.ORANGE
+            com.blockit.domain.model.AccentTheme.DEFAULT
         }
     }
 

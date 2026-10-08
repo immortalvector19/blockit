@@ -10,6 +10,7 @@ import com.blockit.data.local.db.entity.BlockEventEntity
 import com.blockit.domain.evaluator.RuleEvaluator
 import com.blockit.domain.model.TargetType
 import com.blockit.service.overlay.OverlayController
+import com.blockit.ui.overlay.BlockOverlayActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -27,8 +28,30 @@ class BlockAccessibilityService : AccessibilityService() {
     private val lastLoggedBlockTime = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private var currentStrictness = com.blockit.domain.model.SessionStrictness.NORMAL
 
+    companion object {
+        @Volatile
+        var isServiceConnected: Boolean = false
+            private set
+    }
+
+    @Volatile
+    private var currentlyBlockedPackage: String? = null
+
+    @Volatile
+    private var lastBlockedTimestamp: Long = 0L
+
+    override fun onCreate() {
+        super.onCreate()
+        com.blockit.core.engine.EngineLifecycleMonitor.recordLifecycleEvent("BlockAccessibilityService.onCreate")
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
+        isServiceConnected = true
+        com.blockit.core.engine.EngineLifecycleMonitor.updateEngineStatus(
+            com.blockit.core.engine.AccessibilityEngineStatus.CONNECTED
+        )
+        com.blockit.core.engine.EngineLifecycleMonitor.recordLifecycleEvent("BlockAccessibilityService.onServiceConnected")
         val container = BlockItApplication.from(this)
         ruleEvaluator = container.ruleEvaluator
         overlayController = OverlayController(this)
@@ -49,23 +72,21 @@ class BlockAccessibilityService : AccessibilityService() {
 
         com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(true)
         com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = {
-            overlayController.showBlockOverlay(
-                targetIdentifier = "Diagnostic Test",
-                profileName = "FocusShield Diagnostics",
-                reason = "Testing WindowManager overlay rendering & input dispatch",
-                onHomeClicked = {
-                    overlayController.hideBlockOverlay()
-                }
+            BlockOverlayActivity.start(
+                context = this,
+                target = "Diagnostic Test",
+                profile = "FocusShield Diagnostics",
+                reason = "Testing block screen rendering & input dispatch",
+                strictness = com.blockit.domain.model.SessionStrictness.NORMAL
             )
         }
 
         serviceInfo = serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOWS_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                    AccessibilityEvent.TYPE_WINDOWS_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 50
+            notificationTimeout = 100
         }
 
         resolveHomePackages()
@@ -76,10 +97,16 @@ class BlockAccessibilityService : AccessibilityService() {
                 delay(1000)
                 val snapshot = ruleEvaluator.getSnapshot()
                 val hasActiveRules = snapshot.blockedPackages.isNotEmpty() || snapshot.hasActiveWhitelist
-                if (hasActiveRules && !overlayController.isOverlayShowing()) {
+                if (hasActiveRules) {
+                    if (com.blockit.core.engine.EngineLifecycleMonitor.isAnyPermittedLaunchInGracePeriod()) {
+                        continue
+                    }
                     val root = rootInActiveWindow
                     val fgPkg = root?.packageName?.toString() ?: ""
-                    if (fgPkg.isNotBlank() && !isHomePackage(fgPkg) && fgPkg != packageName) {
+                    if (fgPkg.isNotBlank() && !isHomePackage(fgPkg) && fgPkg != packageName && fgPkg != currentlyBlockedPackage) {
+                        if (::systemAppResolver.isInitialized && systemAppResolver.isAlwaysPermitted(fgPkg, isWhitelistMode = snapshot.hasActiveWhitelist)) {
+                            continue
+                        }
                         checkAndBlockForegroundApp(fgPkg)
                     }
                 }
@@ -132,13 +159,20 @@ class BlockAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         val pkgName = event.packageName?.toString() ?: return
+        val cls = event.className?.toString() ?: ""
+        val eventTypeStr = try { AccessibilityEvent.eventTypeToString(event.eventType) } catch (_: Exception) { "${event.eventType}" }
+        android.util.Log.i("FocusShieldEngine", "A11yEvent: pkg=$pkgName, cls=$cls, type=$eventTypeStr, time=${event.eventTime}")
+
         com.blockit.core.health.BlockHealthMonitor.recordAccessibilityEvent(pkgName)
         val snapshot = ruleEvaluator.getSnapshot()
 
         // Ignore events from our own app, UNLESS the user opened the main settings screen
-        if (pkgName == packageName) {
-            val cls = event.className?.toString() ?: ""
+        if (pkgName == packageName || pkgName.startsWith("com.blockit")) {
+            if (cls.contains("BlockOverlayActivity") || cls.contains("FocusHomeActivity")) {
+                return
+            }
             if (cls.contains("MainActivity")) {
+                currentlyBlockedPackage = null
                 if (overlayController.isOverlayShowing()) {
                     overlayController.hideBlockOverlay()
                 }
@@ -146,8 +180,14 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
+        // If this package is currently latched as blocked, ignore repeated events and touches under the block screen.
+        // CRITICAL: NEVER re-trigger startActivity for a package already actively blocked to eliminate touch flicker loops.
+        if (pkgName == currentlyBlockedPackage) {
+            return
+        }
+
         // Ignore essential system framework and UI components dynamically
-        if (::systemAppResolver.isInitialized && systemAppResolver.isAlwaysPermitted(pkgName)) {
+        if (::systemAppResolver.isInitialized && systemAppResolver.isAlwaysPermitted(pkgName, isWhitelistMode = snapshot.hasActiveWhitelist)) {
             return
         }
 
@@ -160,6 +200,7 @@ class BlockAccessibilityService : AccessibilityService() {
         }
 
         if (intentPassManager.hasActivePass(pkgName)) {
+            currentlyBlockedPackage = null
             if (overlayController.isOverlayShowing()) {
                 overlayController.hideBlockOverlay()
             }
@@ -174,16 +215,20 @@ class BlockAccessibilityService : AccessibilityService() {
         // If user is on the Home Launcher:
         if (isHome) {
             if (snapshot.hasActiveWhitelist) {
-                // Whitelist mode: redirect to Focus Home kiosk surface
-                if (overlayController.isOverlayShowing()) {
-                    overlayController.hideBlockOverlay()
+                // If the user legitimately tapped a permitted app moments ago, do NOT redirect back to Focus Home during transition!
+                if (com.blockit.core.engine.EngineLifecycleMonitor.isAnyPermittedLaunchInGracePeriod()) {
+                    return
                 }
+                // Whitelist mode: redirect to Focus Home kiosk surface
+                currentlyBlockedPackage = null
                 val focusHomeIntent = Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 startActivity(focusHomeIntent)
+                com.blockit.core.engine.EngineLifecycleMonitor.recordForegroundTransition(packageName, "FOCUS_HOME_KIOSK_REDIRECT")
             } else {
                 // Blacklist mode: normal phone usage on home screen
+                currentlyBlockedPackage = null
                 if (overlayController.isOverlayShowing()) {
                     overlayController.hideBlockOverlay()
                 }
@@ -197,11 +242,15 @@ class BlockAccessibilityService : AccessibilityService() {
             if (hasActiveBlocks) {
                 val root = rootInActiveWindow ?: event.source
                 if (root != null && isSettingsTamperingAttempt(root)) {
-                    overlayController.showBlockOverlay(
-                        targetIdentifier = "Android Settings",
-                        profileName = "Strict Mode",
+                    currentlyBlockedPackage = "com.android.settings"
+                    lastBlockedTimestamp = System.currentTimeMillis()
+                    BlockOverlayActivity.start(
+                        context = this,
+                        target = "Android Settings",
+                        profile = "Strict Mode",
                         reason = "Settings access guarded during active focus rules",
-                        onHomeClicked = { performGlobalAction(GLOBAL_ACTION_HOME) }
+                        strictness = currentStrictness,
+                        canRequestPause = false
                     )
                     return
                 }
@@ -213,7 +262,8 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         } else {
             // An allowed user app has come to the foreground.
-            // Dismiss the overlay only if Whitelist is NOT active, or if this app is an explicitly permitted whitelisted app.
+            // Clear the latch so new blocks can engage cleanly.
+            currentlyBlockedPackage = null
             if (!snapshot.hasActiveWhitelist || snapshot.whitelistPackages.contains(pkgName)) {
                 if (overlayController.isOverlayShowing()) {
                     overlayController.hideBlockOverlay()
@@ -231,14 +281,16 @@ class BlockAccessibilityService : AccessibilityService() {
                     if (domainEval.isBlocked) {
                         val profile = domainEval.profileName ?: "Focus"
                         val reason = domainEval.reason ?: "Website blocked"
+                        currentlyBlockedPackage = pkgName
+                        lastBlockedTimestamp = System.currentTimeMillis()
 
-                        overlayController.showBlockOverlay(
-                            targetIdentifier = detectedDomain,
-                            profileName = profile,
+                        BlockOverlayActivity.start(
+                            context = this,
+                            target = detectedDomain,
+                            profile = profile,
                             reason = reason,
-                            onHomeClicked = {
-                                performGlobalAction(GLOBAL_ACTION_HOME)
-                            }
+                            strictness = currentStrictness,
+                            canRequestPause = false
                         )
 
                         logBlockEvent(detectedDomain, TargetType.WEBSITE, profile)
@@ -249,20 +301,23 @@ class BlockAccessibilityService : AccessibilityService() {
     }
 
     private fun checkAndBlockForegroundApp(pkgName: String): Boolean {
+        if (com.blockit.core.engine.EngineLifecycleMonitor.isPermittedAppInGracePeriod(pkgName)) {
+            return false
+        }
         if (intentPassManager.hasActivePass(pkgName)) return false
         val result = ruleEvaluator.isAppBlocked(pkgName)
         if (result.isBlocked) {
             val profile = result.profileName ?: "Focus"
             val reason = result.reason ?: "App blocked"
+            currentlyBlockedPackage = pkgName
+            lastBlockedTimestamp = System.currentTimeMillis()
 
             if (result.isWhitelistBlock) {
-                if (overlayController.isOverlayShowing()) {
-                    overlayController.hideBlockOverlay()
-                }
                 val focusHomeIntent = Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 startActivity(focusHomeIntent)
+                com.blockit.core.engine.EngineLifecycleMonitor.recordForegroundTransition(pkgName, "BLOCKED_WHITELIST_REDIRECT")
                 logBlockEvent(pkgName, TargetType.APP, profile)
                 return true
             }
@@ -271,58 +326,22 @@ class BlockAccessibilityService : AccessibilityService() {
             val remaining = intentPassManager.getRemainingPassesToday()
             val maxPauses = intentPassManager.getMaxPauses()
 
-            overlayController.showBlockOverlay(
-                targetIdentifier = pkgName,
-                profileName = profile,
+            if (BlockOverlayActivity.isShowing && BlockOverlayActivity.currentBlockedTarget == pkgName) {
+                return true
+            }
+
+            BlockOverlayActivity.start(
+                context = this,
+                target = pkgName,
+                profile = profile,
                 reason = reason,
                 strictness = currentStrictness,
                 canRequestPause = canPause,
                 remainingPauses = remaining,
-                maxPauses = maxPauses,
-                onHomeClicked = {
-                    overlayController.hideBlockOverlay()
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                },
-                onGrantPause = { minutes ->
-                    val durationMs = minutes * 60 * 1000L
-                    intentPassManager.grantPass(pkgName, minutes)
-                    overlayController.hideBlockOverlay()
-
-                    val appLabel = try {
-                        val appInfo = packageManager.getApplicationInfo(pkgName, 0)
-                        packageManager.getApplicationLabel(appInfo).toString()
-                    } catch (_: Exception) {
-                        pkgName
-                    }
-
-                    overlayController.showPauseCountdownPill(
-                        appName = appLabel,
-                        expiresAtMs = System.currentTimeMillis() + durationMs,
-                        onEndPauseEarly = {
-                            intentPassManager.revokePass(pkgName)
-                            overlayController.hidePauseCountdownPill()
-                            performGlobalAction(GLOBAL_ACTION_HOME)
-                        }
-                    )
-
-                    val launchIntent = packageManager.getLaunchIntentForPackage(pkgName)
-                    launchIntent?.let {
-                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                        startActivity(it)
-                    }
-
-                    appScope.launch(Dispatchers.Main) {
-                        delay(durationMs)
-                        overlayController.hidePauseCountdownPill()
-                        val root = rootInActiveWindow
-                        val currentFg = root?.packageName?.toString() ?: ""
-                        if (currentFg == pkgName) {
-                            performGlobalAction(GLOBAL_ACTION_HOME)
-                        }
-                    }
-                }
+                maxPauses = maxPauses
             )
 
+            com.blockit.core.engine.EngineLifecycleMonitor.recordForegroundTransition(pkgName, "BLOCKED_BLACKLIST_OVERLAY")
             logBlockEvent(pkgName, TargetType.APP, profile)
             return true
         }
@@ -371,14 +390,29 @@ class BlockAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        com.blockit.core.engine.EngineLifecycleMonitor.recordLifecycleEvent("BlockAccessibilityService.onInterrupt")
         if (::overlayController.isInitialized) {
             overlayController.hideBlockOverlay()
             overlayController.hidePauseCountdownPill()
         }
     }
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        isServiceConnected = false
+        com.blockit.core.engine.EngineLifecycleMonitor.updateEngineStatus(
+            com.blockit.core.engine.AccessibilityEngineStatus.ENABLED_NOT_CONNECTED
+        )
+        com.blockit.core.engine.EngineLifecycleMonitor.recordLifecycleEvent("BlockAccessibilityService.onUnbind")
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        isServiceConnected = false
+        com.blockit.core.engine.EngineLifecycleMonitor.updateEngineStatus(
+            com.blockit.core.engine.AccessibilityEngineStatus.ENABLED_NOT_CONNECTED
+        )
+        com.blockit.core.engine.EngineLifecycleMonitor.recordLifecycleEvent("BlockAccessibilityService.onDestroy")
         com.blockit.core.health.BlockHealthMonitor.updateAccessibilityStatus(false)
         com.blockit.core.health.BlockHealthMonitor.testBlockTrigger = null
         if (::overlayController.isInitialized) {

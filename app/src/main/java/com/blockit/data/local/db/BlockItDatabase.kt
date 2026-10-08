@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
         FocusSessionEntity::class,
         BlockEventEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class BlockItDatabase : RoomDatabase() {
@@ -50,13 +50,34 @@ abstract class BlockItDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE profiles ADD COLUMN profileType TEXT NOT NULL DEFAULT 'FOCUS'")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN listType TEXT NOT NULL DEFAULT 'BLOCKLIST'")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN scheduleDaysMask INTEGER NOT NULL DEFAULT 127")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN scheduleStartMinute INTEGER NOT NULL DEFAULT 540")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN scheduleEndMinute INTEGER NOT NULL DEFAULT 1020")
+
+                db.execSQL("UPDATE profiles SET listType = 'ALLOWLIST' WHERE blockMode = 'WHITELIST'")
+                db.execSQL("UPDATE profiles SET listType = 'BLOCKLIST' WHERE blockMode != 'WHITELIST'")
+
+                db.execSQL("""
+                    UPDATE profiles 
+                    SET profileType = 'SCHEDULE',
+                        scheduleDaysMask = (SELECT daysOfWeekMask FROM schedules WHERE schedules.profileId = profiles.id LIMIT 1),
+                        scheduleStartMinute = (SELECT startMinuteOfDay FROM schedules WHERE schedules.profileId = profiles.id LIMIT 1),
+                        scheduleEndMinute = (SELECT endMinuteOfDay FROM schedules WHERE schedules.profileId = profiles.id LIMIT 1)
+                    WHERE id IN (SELECT DISTINCT profileId FROM schedules)
+                """)
+            }
+        }
+
         fun create(context: Context): BlockItDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 BlockItDatabase::class.java,
                 DATABASE_NAME
-            ).addMigrations(MIGRATION_1_2)
-            .fallbackToDestructiveMigration()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
         }
     }

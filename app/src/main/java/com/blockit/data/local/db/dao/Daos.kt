@@ -22,6 +22,11 @@ data class ProfileWithCounts(
     val iconKey: String,
     val isEnabled: Boolean,
     val blockMode: String = "BLACKLIST",
+    val profileType: String = "FOCUS",
+    val listType: String = "BLOCKLIST",
+    val scheduleDaysMask: Int = 127,
+    val scheduleStartMinute: Int = 540,
+    val scheduleEndMinute: Int = 1020,
     val createdAt: Long,
     val appCount: Int,
     val domainCount: Int
@@ -55,8 +60,11 @@ interface ProfileDao {
     @Query("UPDATE profiles SET isEnabled = :isEnabled WHERE id = :profileId")
     suspend fun setProfileEnabled(profileId: Long, isEnabled: Boolean)
 
-    @Query("UPDATE profiles SET blockMode = :blockMode WHERE id = :profileId")
-    suspend fun setProfileMode(profileId: Long, blockMode: String)
+    @Query("UPDATE profiles SET blockMode = :blockMode, listType = :listType WHERE id = :profileId")
+    suspend fun setProfileMode(profileId: Long, blockMode: String, listType: String = if (blockMode == "WHITELIST") "ALLOWLIST" else "BLOCKLIST")
+
+    @Query("UPDATE profiles SET scheduleDaysMask = :daysMask, scheduleStartMinute = :startMin, scheduleEndMinute = :endMin WHERE id = :profileId")
+    suspend fun updateProfileSchedule(profileId: Long, daysMask: Int, startMin: Int, endMin: Int)
 
     @Query("SELECT * FROM profiles ORDER BY createdAt ASC")
     suspend fun getAllProfiles(): List<ProfileEntity>
@@ -69,6 +77,9 @@ interface ProfileDao {
 interface BlockedAppDao {
     @Query("SELECT * FROM blocked_apps WHERE profileId = :profileId ORDER BY appName ASC")
     fun observeAppsForProfile(profileId: Long): Flow<List<BlockedAppEntity>>
+
+    @Query("SELECT * FROM blocked_apps ORDER BY appName ASC")
+    fun observeAllBlockedApps(): Flow<List<BlockedAppEntity>>
 
     @Query("SELECT * FROM blocked_apps WHERE profileId = :profileId")
     suspend fun getAppsForProfile(profileId: Long): List<BlockedAppEntity>
@@ -88,6 +99,9 @@ interface BlockedAppDao {
 
     @Query("DELETE FROM blocked_apps WHERE profileId = :profileId AND packageName = :packageName")
     suspend fun deleteAppByPackage(profileId: Long, packageName: String)
+
+    @Query("DELETE FROM blocked_apps WHERE profileId = :profileId")
+    suspend fun deleteAppsForProfile(profileId: Long)
 }
 
 @Dao
@@ -119,6 +133,12 @@ interface BlockedDomainDao {
 interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE profileId = :profileId")
     fun observeSchedulesForProfile(profileId: Long): Flow<List<ScheduleEntity>>
+
+    @Query("SELECT * FROM schedules ORDER BY startMinuteOfDay ASC")
+    fun observeAllSchedules(): Flow<List<ScheduleEntity>>
+
+    @Query("SELECT * FROM schedules")
+    suspend fun getAllSchedules(): List<ScheduleEntity>
 
     @Query("SELECT * FROM schedules WHERE profileId = :profileId")
     suspend fun getSchedulesForProfile(profileId: Long): List<ScheduleEntity>

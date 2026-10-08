@@ -1,7 +1,6 @@
 package com.blockit.ui.screens.dashboard
 
 import com.blockit.ui.components.StopSessionFrictionDialog
-import com.blockit.ui.components.AmPmTimeWheelPicker
 import com.blockit.ui.components.formatMinuteOfDayAmPm
 import com.blockit.ui.components.fromMinuteOfDay
 import com.blockit.ui.components.isOvernightWindow
@@ -17,6 +16,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +24,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -134,6 +136,46 @@ import com.blockit.domain.model.Schedule
 import com.blockit.domain.model.SessionStrictness
 import com.blockit.domain.model.TimeSavedCalculator
 import com.blockit.domain.model.UsageInsightsData
+import com.blockit.domain.model.FocusDurationState
+import com.blockit.domain.model.ListType
+import com.blockit.domain.model.ProfileType
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.rounded.Schedule
+import com.blockit.ui.components.CreateProfileDialog
+import com.blockit.ui.components.FocusDurationStepper
+import com.blockit.ui.components.EditScheduleDialog
+import com.blockit.ui.components.formatDaysSummary
+import com.blockit.ui.components.formatMinuteOfDayAmPm
+import com.blockit.ui.components.formatNextScheduleRun
+import com.blockit.ui.components.isOvernightWindow
+import com.blockit.ui.components.FocusActiveSessionCard
+import com.blockit.ui.components.FocusAppIcon
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusDestructiveButton
+import com.blockit.ui.components.FocusEmptyState
+import com.blockit.ui.components.FocusAlertDialog
+import com.blockit.ui.components.FocusMonolithMark
+import com.blockit.ui.components.FocusNavBar
+import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.components.FocusSectionHeader
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
+import com.blockit.ui.theme.WarningAmber
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import com.blockit.ui.components.BlockDigitalClock
 import com.blockit.ui.components.SlideToActButton
 import com.blockit.ui.screens.strictmode.StrictModeChallengeDialog
@@ -170,19 +212,19 @@ fun MainDashboardScreen(
     val context = LocalContext.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Timer, 1: Profiles, 2: Routines, 3: Statistics
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: Timer, 1: Profiles, 2: Routines, 3: Statistics
 
     var showHelpDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
     val profiles by viewModel.profiles.collectAsState()
+    val isProfilesLoading by viewModel.isProfilesLoading.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
+    val ruleSnapshot by viewModel.activeRuleSnapshot.collectAsState()
     val strictConfig by viewModel.strictModeConfig.collectAsState()
     val insightsData by viewModel.insightsData.collectAsState()
     val selectedProfileId by viewModel.selectedProfileId.collectAsState()
-    val packedApps by viewModel.packedApps.collectAsState()
-    val packedDomains by viewModel.packedDomains.collectAsState()
-    val schedules by viewModel.schedules.collectAsState()
+    val allProfileApps by viewModel.allProfileApps.collectAsState()
 
     // Strict Mode friction state
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -190,20 +232,24 @@ fun MainDashboardScreen(
     var showStopConfirmDialog by remember { mutableStateOf(false) }
     var pendingStopSessionId by remember { mutableStateOf<Long?>(null) }
     var activeSessionStrictness by rememberSaveable { mutableStateOf(SessionStrictness.NORMAL) }
+    var targetProfileIdForDuration by remember { mutableStateOf<Long?>(null) }
+    var showProfileDurationSheet by remember { mutableStateOf(false) }
 
     val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
     var showOnboardingChecklist by rememberSaveable { mutableStateOf(false) }
 
-    // Live permission check
-    var isAccessibilityEnabled by remember { mutableStateOf(false) }
-    var isOverlayEnabled by remember { mutableStateOf(false) }
-    var isBatteryIgnored by remember { mutableStateOf(false) }
+    // Live permission and engine status check (read real state immediately, never default to negative)
+    var engineStatus by remember { mutableStateOf(com.blockit.core.permission.PermissionIntents.getAccessibilityEngineStatus(context)) }
+    var isOverlayEnabled by remember { mutableStateOf(com.blockit.core.permission.PermissionIntents.canDrawOverlays(context)) }
+    var isBatteryIgnored by remember { mutableStateOf(com.blockit.core.permission.PermissionIntents.isIgnoringBatteryOptimizations(context)) }
 
     fun refreshPermissions() {
-        isAccessibilityEnabled = com.blockit.core.permission.PermissionIntents.isAccessibilityServiceEnabled(context)
+        engineStatus = com.blockit.core.permission.PermissionIntents.getAccessibilityEngineStatus(context)
         isOverlayEnabled = com.blockit.core.permission.PermissionIntents.canDrawOverlays(context)
         isBatteryIgnored = com.blockit.core.permission.PermissionIntents.isIgnoringBatteryOptimizations(context)
     }
+
+    val isAccessibilityEnabled = engineStatus == com.blockit.core.engine.AccessibilityEngineStatus.CONNECTED
 
     LaunchedEffect(onboardingCompleted) {
         if (!onboardingCompleted) {
@@ -247,20 +293,17 @@ fun MainDashboardScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 22.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(28.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
+                    ) {
+                        FocusMonolithMark(
+                            size = 24.dp,
+                            tint = colors.accent
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "FocusShield",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = (-0.5).sp
-                            ),
+                            style = FocusTypography.title,
                             color = colors.textPrimary
                         )
                     }
@@ -391,7 +434,7 @@ fun MainDashboardScreen(
 
                 NavigationDrawerItem(
                     label = { Text("About FocusShield", fontWeight = FontWeight.SemiBold) },
-                    icon = { Icon(Icons.Default.Shield, contentDescription = null, tint = colors.textPrimary) },
+                    icon = { FocusMonolithMark(size = 20.dp, tint = colors.textPrimary) },
                     selected = false,
                     onClick = {
                         scope.launch { drawerState.close() }
@@ -409,7 +452,8 @@ fun MainDashboardScreen(
             topBar = {
                 DashboardTopBar(
                     activeSession = activeSession,
-                    activeProfileName = activeProfile?.name,
+                    activeProfileName = activeProfile?.name ?: ruleSnapshot.activeScheduleProfileName,
+                    isScheduleActive = ruleSnapshot.isScheduleActive,
                     onMenuClick = { scope.launch { drawerState.open() } }
                 )
             },
@@ -435,8 +479,11 @@ fun MainDashboardScreen(
                         profiles = profiles,
                         activeSession = activeSession,
                         selectedProfileId = selectedProfileId,
+                        isProfilesLoading = isProfilesLoading,
+                        engineStatus = engineStatus,
                         isProtected = isProtected,
                         insightsData = insightsData,
+                        ruleSnapshot = ruleSnapshot,
                         onFixPermissions = {
                             showOnboardingChecklist = true
                         },
@@ -452,17 +499,27 @@ fun MainDashboardScreen(
                         onDuplicateProfile = { profId -> viewModel.duplicateProfile(profId) },
                         onCreateTemplateProfile = { type -> viewModel.createTemplateProfile(type) },
                         onNavigateToProfiles = { selectedTab = 1 },
-                        onNavigateToStats = { selectedTab = 3 },
+                        onNavigateToStats = { selectedTab = 2 },
                         onCreateProfileClick = { selectedTab = 1 }
                     )
                     1 -> ProfilesTabContent(
                         profiles = profiles,
-                        selectedProfileId = selectedProfileId,
-                        packedApps = packedApps,
-                        packedDomains = packedDomains,
+                        allProfileApps = allProfileApps,
                         activeSession = activeSession,
-                        onSelectProfile = { viewModel.selectProfile(it) },
-                        onSetProfileMode = { id, mode -> viewModel.setProfileMode(id, mode) },
+                        onAddApps = { id -> onAddAppsClick(id) },
+                        onActivateProfile = { id ->
+                            targetProfileIdForDuration = id
+                            showProfileDurationSheet = true
+                        },
+                        onDuplicateProfile = { id -> viewModel.duplicateProfile(id) },
+                        onDeleteProfile = { id ->
+                            if (strictConfig.isEnabled) {
+                                pendingDescription = "delete this profile"
+                                pendingAction = { viewModel.deleteProfile(id) }
+                            } else {
+                                viewModel.deleteProfile(id)
+                            }
+                        },
                         onToggleProfile = { id, enabled ->
                             if (!enabled && strictConfig.isEnabled) {
                                 pendingDescription = "turn off this profile"
@@ -471,33 +528,12 @@ fun MainDashboardScreen(
                                 viewModel.toggleProfileEnabled(id, enabled)
                             }
                         },
-                        onAddApps = { id -> onAddAppsClick(id) },
-                        onRemoveApp = { id, pkg -> viewModel.removeApp(id, pkg) },
-                        onAddDomain = { id, pattern, wildcard -> viewModel.addDomain(id, pattern, wildcard) },
-                        onRemoveDomain = { domainId -> viewModel.removeDomain(domainId) },
-                        onCreateProfile = { name, mode -> viewModel.createProfile(name, mode) },
-                        onDeleteProfile = { id ->
-                            if (strictConfig.isEnabled) {
-                                pendingDescription = "delete this profile"
-                                pendingAction = { viewModel.deleteProfile(id) }
-                            } else {
-                                viewModel.deleteProfile(id)
-                            }
-                        }
+                        onCreateProfile = { name, profileType, listType, daysMask, startMinute, endMinute ->
+                            viewModel.createProfile(name, profileType, listType, daysMask, startMinute, endMinute)
+                        },
+                        onCreateTemplateProfile = { type -> viewModel.createTemplateProfile(type) }
                     )
-                    2 -> RoutinesTabContent(
-                        profiles = profiles,
-                        selectedProfileId = selectedProfileId,
-                        schedules = schedules,
-                        onSelectProfile = { viewModel.selectProfile(it) },
-                        onSaveSchedule = { viewModel.saveSchedule(it) },
-                        onDeleteSchedule = { viewModel.deleteSchedule(it) },
-                        onNavigateToProfiles = { selectedTab = 1 },
-                        onAddApps = { id -> onAddAppsClick(id) },
-                        onCreateProfile = { name, mode -> viewModel.createProfile(name, mode) },
-                        onSetProfileMode = { id, mode -> viewModel.setProfileMode(id, mode) }
-                    )
-                    3 -> StatisticsTabContent(
+                    2 -> StatisticsTabContent(
                         insightsData = insightsData,
                         activeSession = activeSession
                     )
@@ -561,6 +597,27 @@ fun MainDashboardScreen(
                         }
                     },
                     canDismiss = onboardingCompleted || isProtected
+                )
+            }
+
+            if (showProfileDurationSheet && targetProfileIdForDuration != null) {
+                val targetProfile = profiles.find { it.id == targetProfileIdForDuration }
+                DurationBottomSheet(
+                    targetProfile = targetProfile,
+                    onDismiss = {
+                        showProfileDurationSheet = false
+                        targetProfileIdForDuration = null
+                    },
+                    onStart = { profId, mins, strictness ->
+                        showProfileDurationSheet = false
+                        targetProfileIdForDuration = null
+                        if (!isProtected) {
+                            showOnboardingChecklist = true
+                        } else {
+                            activeSessionStrictness = strictness
+                            viewModel.startSession(profId, mins)
+                        }
+                    }
                 )
             }
         }
@@ -664,78 +721,69 @@ fun MainDashboardScreen(
 private fun DashboardTopBar(
     activeSession: FocusSession?,
     activeProfileName: String?,
+    isScheduleActive: Boolean = false,
     onMenuClick: () -> Unit
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .height(56.dp)
+            .padding(horizontal = FocusSpacing.md),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left: Hamburger Menu Button + Logo & Title
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
         ) {
             IconButton(
                 onClick = onMenuClick,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "Open Navigation Drawer",
+                    imageVector = Icons.Rounded.Menu,
+                    contentDescription = "Open navigation menu",
                     tint = colors.textPrimary,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = null,
-                    tint = colors.primary,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "FocusShield",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = FontFamily.SansSerif,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 20.sp,
-                        letterSpacing = (-0.5).sp
-                    ),
-                    color = colors.textPrimary
-                )
-            }
+            FocusMonolithMark(
+                size = 20.dp,
+                tint = colors.accent
+            )
+
+            Text(
+                text = "FocusShield",
+                style = FocusTypography.title,
+                color = colors.textPrimary
+            )
         }
 
-        // Right: Active session pulse indicator
-        if (activeSession != null) {
+        // Right: Active session or active schedule indicator
+        val isAnyActive = activeSession != null || isScheduleActive
+        if (isAnyActive) {
             Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (colors.isDark) Color(0xFF14532D).copy(alpha = 0.4f) else Color(0xFFDCFCE7),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF16A34A) else Color(0xFF86EFAC))
+                shape = FocusShapes.small,
+                color = colors.accentContainer,
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = FocusSpacing.xxs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                 ) {
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(SignalGreen)
+                            .background(colors.statusActive)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (!activeProfileName.isNullOrBlank()) "Active: $activeProfileName" else "Active",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        style = FocusTypography.label,
                         color = colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -751,49 +799,15 @@ private fun DashboardBottomBar(
     selectedTab: Int,
     onTabSelect: (Int) -> Unit
 ) {
-    val colors = BlockitTheme.colors
-    NavigationBar(
-        containerColor = colors.surface,
-        tonalElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        val tabs = listOf(
-            Icons.Default.Timer to "Home",
-            Icons.Default.Shield to "Profiles",
-            Icons.Default.Schedule to "Schedules",
-            Icons.Default.BarChart to "Stats"
-        )
-
-        tabs.forEachIndexed { index, (icon, label) ->
-            val isSelected = selectedTab == index
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = { onTabSelect(index) },
-                icon = {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        modifier = Modifier.size(22.dp)
-                    )
-                },
-                label = {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = colors.primary,
-                    selectedTextColor = colors.primary,
-                    indicatorColor = colors.primary.copy(alpha = 0.12f),
-                    unselectedIconColor = colors.textMuted,
-                    unselectedTextColor = colors.textMuted
-                )
-            )
+    val routes = listOf("home", "profiles", "stats")
+    val currentRoute = routes.getOrElse(selectedTab) { "home" }
+    FocusNavBar(
+        currentRoute = currentRoute,
+        onNavigate = { route ->
+            val index = routes.indexOf(route)
+            if (index >= 0) onTabSelect(index)
         }
-    }
+    )
 }
 
 // -------------------------------------------------------------
@@ -804,8 +818,11 @@ private fun DashboardHomeContent(
     profiles: List<Profile>,
     activeSession: FocusSession?,
     selectedProfileId: Long?,
+    isProfilesLoading: Boolean,
+    engineStatus: com.blockit.core.engine.AccessibilityEngineStatus,
     isProtected: Boolean,
     insightsData: UsageInsightsData,
+    ruleSnapshot: com.blockit.domain.evaluator.ActiveRuleSnapshot,
     onFixPermissions: () -> Unit,
     onSelectProfile: (Long) -> Unit,
     onStartSession: (Long, Int, SessionStrictness) -> Unit,
@@ -816,9 +833,48 @@ private fun DashboardHomeContent(
     onNavigateToStats: () -> Unit,
     onCreateProfileClick: () -> Unit
 ) {
-    val colors = BlockitTheme.colors
-    var showDurationSheet by remember { mutableStateOf(false) }
-    var showProfilePickerDialog by remember { mutableStateOf(false) }
+    val colors = FocusTheme.colors
+
+    if (isProfilesLoading) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = FocusSpacing.xl, vertical = FocusSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(FocusSpacing.lg)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                shape = FocusShapes.medium,
+                color = colors.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, colors.border.copy(alpha = 0.5f))
+            ) {}
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(84.dp),
+                    shape = FocusShapes.medium,
+                    color = colors.surfaceVariant.copy(alpha = 0.5f)
+                ) {}
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(84.dp),
+                    shape = FocusShapes.medium,
+                    color = colors.surfaceVariant.copy(alpha = 0.5f)
+                ) {}
+            }
+        }
+        return
+    }
+
+    var showDurationSheet by rememberSaveable { mutableStateOf(false) }
+    var showProfilePickerDialog by rememberSaveable { mutableStateOf(false) }
 
     // Live remaining time countdown for active session
     val now = System.currentTimeMillis()
@@ -835,293 +891,232 @@ private fun DashboardHomeContent(
         }
     }
 
-    val totalSessionMs = if (activeSession != null) {
-        (activeSession.endTimestamp - activeSession.startTimestamp).coerceAtLeast(1000L)
-    } else 1L
-    val sessionProgress = if (activeSession != null) {
-        1f - (remainingMs.toFloat() / totalSessionMs.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-
-    val displayHours = if (activeSession != null) (remainingMs / 1000 / 3600).toInt() else 0
-    val displayMins = if (activeSession != null) ((remainingMs / 1000 % 3600) / 60).toInt() else 0
-    val displaySecs = if (activeSession != null) (remainingMs / 1000 % 60).toInt() else 0
-
     val targetProfile = profiles.find { it.id == (activeSession?.profileId ?: selectedProfileId) } ?: profiles.firstOrNull()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .padding(horizontal = FocusSpacing.xl, vertical = FocusSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(FocusSpacing.lg)
     ) {
-        // -------------------------------------------------------------
-        // SECTION 1: ENGINE STATUS CARD (Only shown when !isProtected)
-        // -------------------------------------------------------------
-        if (!isProtected) {
-            Card(
-                onClick = onFixPermissions,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (colors.isDark) Color(0xFF3B1515) else Color(0xFFFFF1F2)
-                ),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFECDD3)
-                )
+        // SECTION 1: ENGINE STATUS CARD
+        if (engineStatus == com.blockit.core.engine.AccessibilityEngineStatus.ENABLED_NOT_CONNECTED) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(FocusShapes.medium)
+                    .border(1.dp, colors.accent.copy(alpha = 0.3f), FocusShapes.medium)
+                    .clickable { onFixPermissions() },
+                color = colors.surfaceVariant,
+                shape = FocusShapes.medium
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(FocusSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(colors.accent.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(FocusSpacing.md))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Engine reconnecting",
+                            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Service recovering after background memory cleanup.",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(FocusSpacing.sm))
+                    FocusOutlinedButton(
+                        text = "Refresh",
+                        onClick = onFixPermissions
+                    )
+                }
+            }
+        } else if (!isProtected) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(FocusShapes.medium)
+                    .border(1.dp, colors.statusDestructive.copy(alpha = 0.3f), FocusShapes.medium)
+                    .clickable { onFixPermissions() },
+                color = if (colors.isDark) Color(0xFF261214) else Color(0xFFFEF2F2),
+                shape = FocusShapes.medium
+            ) {
+                Row(
+                    modifier = Modifier.padding(FocusSpacing.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(if (colors.isDark) Color(0xFF7F1D1D) else Color(0xFFFFE4E6)),
+                            .background(colors.statusDestructive.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Default.Warning,
+                            Icons.Rounded.Warning,
                             contentDescription = null,
-                            tint = Color(0xFFE11D48),
-                            modifier = Modifier.size(22.dp)
+                            tint = colors.statusDestructive,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.md))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Blocking Engine Needs Setup",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (colors.isDark) Color(0xFFFCA5A5) else Color(0xFF9F1239)
+                            text = "Blocking engine needs setup",
+                            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Grant Accessibility, Overlay, and Battery Exemption to enable background protection.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (colors.isDark) Color(0xFFF87171) else Color(0xFFBE123C)
+                            text = "Grant accessibility, overlay, and battery exemption to enable protection.",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onFixPermissions,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE11D48),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text("Fix", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                    }
+                    Spacer(modifier = Modifier.width(FocusSpacing.sm))
+                    FocusDestructiveButton(
+                        text = "Set up",
+                        onClick = onFixPermissions
+                    )
                 }
             }
         }
 
-        // -------------------------------------------------------------
         // SECTION 2: ACTIVE SESSION CARD or START FOCUS CARD
-        // -------------------------------------------------------------
         if (activeSession != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            val totalSeconds = (activeSession.endTimestamp - activeSession.startTimestamp).coerceAtLeast(1000L) / 1000
+            val remainingSeconds = remainingMs / 1000
+            FocusActiveSessionCard(
+                profileName = targetProfile?.name ?: "Focus",
+                isWhitelist = targetProfile?.blockMode == BlockMode.WHITELIST || targetProfile?.listType == ListType.ALLOWLIST,
+                remainingSeconds = remainingSeconds,
+                totalSeconds = totalSeconds,
+                onStopClick = { onEndSession(activeSession.id) }
+            )
+        } else {
+            if (ruleSnapshot.isScheduleActive) {
+                val schedProfileName = ruleSnapshot.activeScheduleProfileName ?: "Schedule"
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(FocusShapes.medium)
+                        .border(1.dp, colors.accent.copy(alpha = 0.5f), FocusShapes.medium),
+                    color = colors.surface,
+                    shape = FocusShapes.medium
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.padding(FocusSpacing.lg)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(colors.primary)
+                                    .background(colors.statusActive)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "ACTIVE FOCUS SESSION",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.2.sp
-                                ),
-                                color = colors.primary
+                                text = "Scheduled session active",
+                                style = FocusTypography.label,
+                                color = colors.accent
                             )
                         }
-
-                        if (targetProfile != null) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (targetProfile.blockMode == BlockMode.WHITELIST)
-                                    colors.primary.copy(alpha = 0.15f)
-                                else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF)
-                            ) {
-                                Text(
-                                    text = if (targetProfile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
-                                    color = if (targetProfile.blockMode == BlockMode.WHITELIST) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Circular countdown ring
-                    Box(
-                        modifier = Modifier.size(170.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            progress = { 1f },
-                            modifier = Modifier.fillMaxSize(),
-                            color = colors.border,
-                            strokeWidth = 8.dp,
-                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                        )
-                        CircularProgressIndicator(
-                            progress = { sessionProgress },
-                            modifier = Modifier.fillMaxSize(),
-                            color = colors.primary,
-                            strokeWidth = 8.dp,
-                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                        )
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val countdownText = if (displayHours > 0) {
-                                String.format("%02d:%02d:%02d", displayHours, displayMins, displaySecs)
-                            } else {
-                                String.format("%02d:%02d", displayMins, displaySecs)
-                            }
-                            Text(
-                                text = countdownText,
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 32.sp,
-                                    letterSpacing = (-1).sp
-                                ),
-                                color = colors.textPrimary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "remaining",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    val endTimeStr = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
-                        .format(java.util.Date(activeSession.endTimestamp))
-
-                    Text(
-                        text = "Protecting with '${targetProfile?.name ?: "Focus"}' until $endTimeStr",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
-                    )
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Stop button with friction trigger
-                    OutlinedButton(
-                        onClick = { onEndSession(activeSession.id) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFEF4444)
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f))
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.height(FocusSpacing.xs))
                         Text(
-                            text = "Stop Session",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                            text = schedProfileName,
+                            style = FocusTypography.headline,
+                            color = colors.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(FocusSpacing.xxs))
+                        Text(
+                            text = "This profile is active according to schedule. Unscheduled manual sessions are disabled while schedule runs.",
+                            style = FocusTypography.bodySmall,
+                            color = colors.textSecondary
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(FocusSpacing.md))
             }
-        } else {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(FocusShapes.medium)
+                    .border(1.dp, colors.border, FocusShapes.medium),
+                color = colors.surface,
+                shape = FocusShapes.medium
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
+                Column(modifier = Modifier.padding(FocusSpacing.lg)) {
                     Text(
-                        text = "Quick Focus",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        text = "Start focus",
+                        style = FocusTypography.title,
                         color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.xxs))
                     Text(
                         text = "Select a profile to start blocking.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
+                        style = FocusTypography.body,
+                        color = colors.textSecondary
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.md))
 
-                    // Selected Profile Pill
+                    // Selected Profile selector row
                     Surface(
-                        onClick = { showProfilePickerDialog = true },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                        onClick = { if (!ruleSnapshot.isScheduleActive) showProfilePickerDialog = true },
+                        shape = FocusShapes.small,
+                        color = colors.surfaceVariant,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(14.dp),
+                            modifier = Modifier.padding(FocusSpacing.md),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.primary.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Shield,
-                                    contentDescription = null,
-                                    tint = colors.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
+                            FocusMonolithMark(
+                                size = 20.dp,
+                                tint = colors.accent
+                            )
+                            Spacer(modifier = Modifier.width(FocusSpacing.md))
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                                 ) {
                                     Text(
-                                        text = targetProfile?.name ?: "No Profile Selected",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        text = targetProfile?.name ?: "No profile selected",
+                                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                         color = colors.textPrimary
                                     )
                                     if (targetProfile != null) {
-                                        val isWhitelist = targetProfile.blockMode == BlockMode.WHITELIST
+                                        val isWhitelist = targetProfile.blockMode == BlockMode.WHITELIST || targetProfile.listType == ListType.ALLOWLIST
                                         Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = if (isWhitelist) colors.primary.copy(alpha = 0.15f) else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF)
+                                            shape = FocusShapes.small,
+                                            color = colors.accentContainer
                                         ) {
                                             Text(
-                                                text = if (isWhitelist) "Whitelist" else "Blacklist",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                                color = if (isWhitelist) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                text = if (isWhitelist) "Allowlist" else "Blocklist",
+                                                style = FocusTypography.label,
+                                                color = colors.accent,
+                                                modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
                                             )
                                         }
                                     }
@@ -1129,98 +1124,101 @@ private fun DashboardHomeContent(
                                 Text(
                                     text = when {
                                         targetProfile == null -> "Tap to choose a profile"
-                                        targetProfile.blockMode == BlockMode.WHITELIST -> "${targetProfile.appCount} permitted apps"
+                                        targetProfile.blockMode == BlockMode.WHITELIST || targetProfile.listType == ListType.ALLOWLIST -> "${targetProfile.appCount} permitted apps"
                                         else -> "${targetProfile.appCount} apps, ${targetProfile.domainCount} sites"
                                     },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.textMuted
+                                    style = FocusTypography.caption,
+                                    color = colors.textSecondary
                                 )
                             }
-                            Text(
-                                text = "Change",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colors.primary
-                            )
+                            if (!ruleSnapshot.isScheduleActive) {
+                                Text(
+                                    text = "Change",
+                                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.accent
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
-                    // Primary Start Focus Button
-                    Button(
+                    val isScheduleActive = ruleSnapshot.isScheduleActive
+                    val startButtonText = when {
+                        isScheduleActive -> "Start disabled — schedule running"
+                        !isProtected -> "Set up engine to start"
+                        targetProfile == null -> "Create profile to start"
+                        else -> "Choose duration and start"
+                    }
+
+                    var lastChooseDurationClickTime by remember { mutableLongStateOf(0L) }
+                    FocusButton(
+                        text = startButtonText,
+                        enabled = !isScheduleActive,
                         onClick = {
-                            if (!isProtected) {
-                                onFixPermissions()
-                            } else if (targetProfile != null) {
-                                showDurationSheet = true
-                            } else {
-                                onCreateProfileClick()
+                            val clickNow = System.currentTimeMillis()
+                            if (clickNow - lastChooseDurationClickTime >= 400L) {
+                                lastChooseDurationClickTime = clickNow
+                                if (!isProtected) {
+                                    onFixPermissions()
+                                } else if (targetProfile != null) {
+                                    showDurationSheet = true
+                                } else {
+                                    onCreateProfileClick()
+                                }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (!isProtected) Color(0xFFE11D48) else colors.primary,
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = if (!isProtected) Icons.Default.Warning else Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        leadingIcon = if (!isProtected) Icons.Rounded.Warning else Icons.Rounded.PlayArrow,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isScheduleActive) {
+                        Spacer(modifier = Modifier.height(FocusSpacing.xs))
                         Text(
-                            text = if (!isProtected) "Setup Engine to Start" else if (targetProfile == null) "Create Profile to Start" else "Choose Duration & Start",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                            text = "A scheduled focus block is currently active. Manual sessions cannot be started while a schedule runs.",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
             }
         }
 
-        // -------------------------------------------------------------
-        // SECTION 3: TODAY'S STATS SUMMARY (Real Room DB data only)
-        // -------------------------------------------------------------
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+        // SECTION 3: TODAY'S STATS SUMMARY
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(FocusShapes.medium)
+                .border(1.dp, colors.border, FocusShapes.medium),
+            color = colors.surface,
+            shape = FocusShapes.medium
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(FocusSpacing.lg)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Today's Activity",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        text = "Today's activity",
+                        style = FocusTypography.title,
                         color = colors.textPrimary
                     )
                     TextButton(
                         onClick = onNavigateToStats,
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Full Stats",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colors.primary
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = colors.primary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
+                        Text(
+                            text = "All stats",
+                            style = FocusTypography.label,
+                            color = colors.accent
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.md))
 
                 val liveSessionMinutes = if (activeSession != null) {
                     val elapsedMs = (System.currentTimeMillis() - activeSession.startTimestamp).coerceAtLeast(0L)
@@ -1235,65 +1233,57 @@ private fun DashboardHomeContent(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = FocusSpacing.sm),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No distraction attempts today. Start a focus session to protect your flow.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.textMuted,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            text = "No distraction attempts today. Start a focus session to begin.",
+                            style = FocusTypography.body,
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center
                         )
                     }
                 } else {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
                     ) {
-                        // Focus Time
                         Surface(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC)
+                            shape = FocusShapes.small,
+                            color = colors.surfaceVariant
                         ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
+                            Column(modifier = Modifier.padding(FocusSpacing.md)) {
                                 Text(
-                                    text = "Focus Time",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.textMuted
+                                    text = "Focus time",
+                                    style = FocusTypography.caption,
+                                    color = colors.textSecondary
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(FocusSpacing.xxs))
                                 Text(
                                     text = liveFormattedFocusTime,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Black
-                                    ),
+                                    style = FocusTypography.headline,
                                     color = colors.textPrimary
                                 )
                             }
                         }
 
-                        // Blocked attempts
                         Surface(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC)
+                            shape = FocusShapes.small,
+                            color = colors.surfaceVariant
                         ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
+                            Column(modifier = Modifier.padding(FocusSpacing.md)) {
                                 Text(
                                     text = "Intercepted",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.textMuted
+                                    style = FocusTypography.caption,
+                                    color = colors.textSecondary
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(FocusSpacing.xxs))
                                 Text(
                                     text = "${insightsData.blockedToday}",
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Black
-                                    ),
-                                    color = colors.primary
+                                    style = FocusTypography.headline,
+                                    color = colors.accent
                                 )
                             }
                         }
@@ -1302,84 +1292,61 @@ private fun DashboardHomeContent(
             }
         }
 
-        // -------------------------------------------------------------
         // SECTION 4: PROFILES OVERVIEW & TEMPLATES
-        // -------------------------------------------------------------
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(FocusShapes.medium)
+                .border(1.dp, colors.border, FocusShapes.medium),
+            color = colors.surface,
+            shape = FocusShapes.medium
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(FocusSpacing.lg)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Focus Profiles",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        text = "Profiles",
+                        style = FocusTypography.title,
                         color = colors.textPrimary
                     )
                     TextButton(
                         onClick = onNavigateToProfiles,
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Manage",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colors.primary
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = colors.primary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
+                        Text(
+                            text = "Manage",
+                            style = FocusTypography.label,
+                            color = colors.accent
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
                 // Template quick-add buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
                 ) {
-                    OutlinedButton(
+                    FocusOutlinedButton(
+                        text = "+ Work hours",
                         onClick = { onCreateTemplateProfile("WORK") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "+ Work Hours",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = colors.primary
-                        )
-                    }
-                    OutlinedButton(
+                        modifier = Modifier.weight(1f)
+                    )
+                    FocusOutlinedButton(
+                        text = "+ Sleep and rest",
                         onClick = { onCreateTemplateProfile("SLEEP") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "+ Sleep & Rest",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = colors.primary
-                        )
-                    }
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.md))
 
                 // Profile items list
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.xs)) {
                     profiles.forEach { prof ->
                         val isSelected = prof.id == targetProfile?.id
                         Surface(
@@ -1388,50 +1355,50 @@ private fun DashboardHomeContent(
                                     onSelectProfile(prof.id)
                                 }
                             },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) colors.primary.copy(alpha = 0.08f) else if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
+                            shape = FocusShapes.small,
+                            color = if (isSelected) colors.accentContainer else colors.surfaceVariant,
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
-                                if (isSelected) colors.primary else colors.border
+                                if (isSelected) colors.accent else colors.border
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier.padding(FocusSpacing.md),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                                     ) {
                                         Text(
                                             text = prof.name,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                             color = colors.textPrimary
                                         )
                                         val isWhitelist = prof.blockMode == BlockMode.WHITELIST
                                         Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = if (isWhitelist) colors.primary.copy(alpha = 0.15f) else if (colors.isDark) Color(0xFF1E293B) else Color(0xFFE0E7FF)
+                                            shape = FocusShapes.small,
+                                            color = colors.surface
                                         ) {
                                             Text(
-                                                text = if (isWhitelist) "Whitelist" else "Blacklist",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                                color = if (isWhitelist) colors.primary else if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF2563EB),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                text = if (isWhitelist) "Allowlist" else "Blocklist",
+                                                style = FocusTypography.label,
+                                                color = if (isWhitelist) colors.accent else colors.textSecondary,
+                                                modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
                                             )
                                         }
                                         if (activeSession != null) {
                                             Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = if (colors.isDark) Color(0xFF332A15) else Color(0xFFFEF3C7)
+                                                shape = FocusShapes.small,
+                                                color = colors.surface
                                             ) {
                                                 Text(
                                                     text = "Locked",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                                    color = if (colors.isDark) Color(0xFFFCD34D) else Color(0xFFB45309),
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    style = FocusTypography.label,
+                                                    color = WarningAmber,
+                                                    modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
                                                 )
                                             }
                                         }
@@ -1442,29 +1409,29 @@ private fun DashboardHomeContent(
                                             "${prof.appCount} permitted apps"
                                         else
                                             "${prof.appCount} apps, ${prof.domainCount} sites",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = colors.textMuted
+                                        style = FocusTypography.caption,
+                                        color = colors.textSecondary
                                     )
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(
                                         onClick = { onDuplicateProfile(prof.id) },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.ContentCopy,
-                                            contentDescription = "Duplicate Profile",
-                                            tint = colors.textMuted,
-                                            modifier = Modifier.size(16.dp)
+                                            Icons.Rounded.ContentCopy,
+                                            contentDescription = "Duplicate profile",
+                                            tint = colors.textTertiary,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                     if (isSelected) {
-                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Spacer(modifier = Modifier.width(FocusSpacing.xs))
                                         Icon(
-                                            Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = colors.primary,
+                                            Icons.Rounded.CheckCircle,
+                                            contentDescription = "Selected profile",
+                                            tint = colors.accent,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -1571,27 +1538,21 @@ private fun DurationBottomSheet(
     onDismiss: () -> Unit,
     onStart: (Long, Int, SessionStrictness) -> Unit
 ) {
-    val colors = BlockitTheme.colors
-    var selectedMinutes by remember { mutableIntStateOf(25) }
-    var selectedStrictness by remember { mutableStateOf(SessionStrictness.NORMAL) }
-    var customHoursText by remember { mutableStateOf("0") }
-    var customMinsText by remember { mutableStateOf("25") }
-    var isCustomMode by remember { mutableStateOf(false) }
-
-    val presets = listOf(15, 25, 45, 60, 90)
-
-    val targetEndCal = Calendar.getInstance().apply {
-        add(Calendar.MINUTE, selectedMinutes)
+    val colors = FocusTheme.colors
+    var totalMinutes by rememberSaveable { mutableIntStateOf(25) }
+    val durationState = remember(totalMinutes) {
+        FocusDurationState().withTotalMinutes(totalMinutes)
     }
-    val targetEndTimeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(targetEndCal.time)
+    var selectedStrictness by rememberSaveable { mutableStateOf(SessionStrictness.NORMAL) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
+        shape = FocusShapes.large,
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(vertical = 10.dp)
+                    .padding(vertical = FocusSpacing.sm)
                     .width(36.dp)
                     .height(4.dp)
                     .clip(CircleShape)
@@ -1602,212 +1563,148 @@ private fun DurationBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .navigationBarsPadding()
         ) {
-            Text(
-                text = "Start Focus Session",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = colors.textPrimary
-            )
-
-            // Target Profile Pill
-            if (targetProfile != null) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Profile: ${targetProfile.name}",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = if (targetProfile.blockMode == BlockMode.WHITELIST) "Whitelist Mode (${targetProfile.appCount} permitted)" else "Blacklist Mode (${targetProfile.appCount} blocked)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Duration Presets
-            Text(
-                text = "Duration",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = colors.textPrimary
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Scrollable upper content
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = FocusSpacing.xl)
+                    .padding(bottom = FocusSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)
             ) {
-                presets.forEach { mins ->
-                    val isSelected = !isCustomMode && selectedMinutes == mins
-                    Surface(
-                        onClick = {
-                            isCustomMode = false
-                            selectedMinutes = mins
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isSelected) colors.primary else if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border)
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${mins}m",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) Color.White else colors.textPrimary
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Custom Time Toggle / Input
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = { isCustomMode = !isCustomMode }) {
-                    Text(
-                        text = if (isCustomMode) "Use Presets" else "+ Custom Duration",
-                        color = colors.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
                 Text(
-                    text = "Ends at $targetEndTimeStr",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted
+                    text = "Start focus session",
+                    style = FocusTypography.headline,
+                    color = colors.textPrimary
                 )
-            }
 
-            if (isCustomMode) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = customHoursText,
-                        onValueChange = {
-                            if (it.length <= 2 && it.all { c -> c.isDigit() }) {
-                                customHoursText = it
-                                val h = it.toIntOrNull() ?: 0
-                                val m = customMinsText.toIntOrNull() ?: 0
-                                selectedMinutes = (h * 60 + m).coerceIn(1, 720)
-                            }
-                        },
-                        label = { Text("Hours") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = customMinsText,
-                        onValueChange = {
-                            if (it.length <= 2 && it.all { c -> c.isDigit() }) {
-                                customMinsText = it
-                                val h = customHoursText.toIntOrNull() ?: 0
-                                val m = it.toIntOrNull() ?: 0
-                                selectedMinutes = (h * 60 + m).coerceIn(1, 720)
-                            }
-                        },
-                        label = { Text("Mins") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
-            }
-
-            // Strictness Selection
-            Text(
-                text = "Session Strictness",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = colors.textPrimary
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    Triple(SessionStrictness.NORMAL, "Normal", "Stop anytime with brief 10s reflection"),
-                    Triple(SessionStrictness.STRICT, "Strict", "15s cooldown + type phrase to unlock"),
-                    Triple(SessionStrictness.LOCKED, "Locked", "Cannot stop session early until timer expires")
-                ).forEach { (level, title, desc) ->
-                    val isSelected = selectedStrictness == level
+                // Target Profile Summary
+                if (targetProfile != null) {
                     Surface(
-                        onClick = { selectedStrictness = level },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else Color(0xFFF8FAFC)) else Color.Transparent,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
+                        shape = FocusShapes.medium,
+                        color = colors.surfaceVariant,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(FocusSpacing.md),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column {
                                 Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    text = "Profile: ${targetProfile.name}",
+                                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = colors.textPrimary
                                 )
                                 Text(
-                                    text = desc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.textMuted
+                                    text = if (targetProfile.blockMode == BlockMode.WHITELIST || targetProfile.listType == ListType.ALLOWLIST)
+                                        "Allowlist mode (${targetProfile.appCount} permitted)"
+                                    else
+                                        "Blocklist mode (${targetProfile.appCount} blocked)",
+                                    style = FocusTypography.caption,
+                                    color = colors.textSecondary
                                 )
                             }
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = colors.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                        }
+                    }
+                }
+
+                // Duration Section
+                Text(
+                    text = "Duration",
+                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+
+                FocusDurationStepper(
+                    durationState = durationState,
+                    onDurationChanged = { updated ->
+                        totalMinutes = updated.totalMinutes
+                    }
+                )
+
+                // Strictness Selection
+                Text(
+                    text = "Session strictness",
+                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.xs)) {
+                    listOf(
+                        Triple(SessionStrictness.NORMAL, "Normal", "Stop anytime with brief reflection"),
+                        Triple(SessionStrictness.STRICT, "Strict", "15s cooldown and typed phrase to unlock"),
+                        Triple(SessionStrictness.LOCKED, "Locked", "Cannot stop session early until timer expires")
+                    ).forEach { (level, title, desc) ->
+                        val isSelected = selectedStrictness == level
+                        Surface(
+                            onClick = { selectedStrictness = level },
+                            shape = FocusShapes.small,
+                            color = if (isSelected) colors.accentContainer else colors.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.accent else colors.border),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(FocusSpacing.md),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = colors.textPrimary
+                                    )
+                                    Text(
+                                        text = desc,
+                                        style = FocusTypography.caption,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Big Start Button
-            Button(
-                onClick = {
-                    if (targetProfile != null) {
-                        onStart(targetProfile.id, selectedMinutes, selectedStrictness)
-                    }
-                },
-                enabled = targetProfile != null,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
+            // Pinned Bottom Surface
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = colors.surface,
+                tonalElevation = 6.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border.copy(alpha = 0.5f))
             ) {
-                Text(
-                    text = "Start ${selectedMinutes}-Minute Focus",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = FocusSpacing.xl, vertical = FocusSpacing.md)
+                ) {
+                    val currentMins = totalMinutes.coerceAtLeast(1)
+                    var lastStartClickTime by remember { mutableLongStateOf(0L) }
+                    FocusButton(
+                        text = "Start focus ($currentMins min)",
+                        onClick = {
+                            val now = System.currentTimeMillis()
+                            if (now - lastStartClickTime >= 600L && targetProfile != null) {
+                                lastStartClickTime = now
+                                onStart(targetProfile.id, currentMins, selectedStrictness)
+                            }
+                        },
+                        enabled = targetProfile != null && currentMins > 0,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -1819,568 +1716,480 @@ private fun DurationBottomSheet(
 @Composable
 private fun ProfilesTabContent(
     profiles: List<Profile>,
-    selectedProfileId: Long?,
-    packedApps: List<BlockedApp>,
-    packedDomains: List<BlockedDomain>,
+    allProfileApps: Map<Long, List<BlockedApp>>,
     activeSession: FocusSession?,
-    onSelectProfile: (Long) -> Unit,
-    onSetProfileMode: (Long, BlockMode) -> Unit,
-    onToggleProfile: (Long, Boolean) -> Unit,
     onAddApps: (Long) -> Unit,
-    onRemoveApp: (Long, String) -> Unit,
-    onAddDomain: (Long, String, Boolean) -> Unit,
-    onRemoveDomain: (Long) -> Unit,
-    onCreateProfile: (String, BlockMode) -> Unit,
-    onDeleteProfile: (Long) -> Unit
+    onActivateProfile: (Long) -> Unit,
+    onDuplicateProfile: (Long) -> Unit,
+    onDeleteProfile: (Long) -> Unit,
+    onToggleProfile: (Long, Boolean) -> Unit,
+    onCreateProfile: (String, ProfileType, ListType, Int, Int, Int) -> Unit,
+    onCreateTemplateProfile: (String) -> Unit
 ) {
-    val colors = BlockitTheme.colors
-    val currentProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var showAddDomainDialog by remember { mutableStateOf(false) }
-    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    val colors = FocusTheme.colors
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var profileToDelete by remember { mutableStateOf<Profile?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.md)
     ) {
-
         if (activeSession != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = if (colors.isDark) Color(0xFF1E293B) else Color(0xFFEFF6FF)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (colors.isDark) Color(0xFF3B82F6) else Color(0xFF93C5FD))
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF3B82F6), modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Session active: Profiles and blocklists are locked read-only.",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (colors.isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)
-                    )
-                }
-            }
-        }
-
-        // Distinct FocusShield Profiles Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Shield,
-                contentDescription = null,
-                tint = colors.primary,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Focus Profiles",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-                Text(
-                    text = "Blacklists block distractions; Whitelists lock everything except essential apps.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (profiles.isEmpty()) {
-            // Empty state when no profiles exist
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = FocusSpacing.md),
+                shape = FocusShapes.medium,
+                color = colors.surfaceVariant,
                 border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    modifier = Modifier.padding(FocusSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Shield,
+                        imageVector = Icons.Rounded.Lock,
                         contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(48.dp)
+                        tint = colors.accent,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.sm))
                     Text(
-                        text = "No Focus Profiles Yet",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        text = "Session active. Profiles and rules are locked read-only.",
+                        style = FocusTypography.bodySmall.copy(fontWeight = FontWeight.Medium),
                         color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Create your first profile to configure which apps and websites to block or allow.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted,
-                        textAlign = TextAlign.Center
+                }
+            }
+        }
+
+        // Section Header
+        FocusSectionHeader(
+            title = "Profiles",
+            subtitle = "Block distractions or allow only essential tools",
+            action = {
+                FocusOutlinedButton(
+                    text = "New profile",
+                    leadingIcon = Icons.Rounded.Add,
+                    onClick = { showCreateDialog = true },
+                    enabled = activeSession == null
+                )
+            }
+        )
+
+        Spacer(modifier = Modifier.height(FocusSpacing.md))
+
+        if (profiles.isEmpty()) {
+            FocusEmptyState(
+                title = "No focus profiles yet",
+                message = "Create a custom profile or choose a template below to get started.",
+                icon = Icons.Rounded.Layers,
+                actionButton = {
+                    FocusButton(
+                        text = "Create profile",
+                        leadingIcon = Icons.Rounded.Add,
+                        onClick = { showCreateDialog = true },
+                        enabled = activeSession == null
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { showCreateDialog = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("+ Create First Profile", color = if (colors.isDark) colors.primary else Color.White)
-                    }
                 }
-            }
+            )
         } else {
-            // Profile selector pills
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LazyRow(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(profiles) { profile ->
-                        val isSelected = profile.id == currentProfile?.id
-                        Surface(
-                            onClick = { onSelectProfile(profile.id) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border)
-                        ) {
-                            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = profile.name,
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-                // Add Profile button (disabled during active session)
-                if (activeSession == null) {
-                    IconButton(
-                        onClick = { showCreateDialog = true },
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(colors.surface)
+            Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)) {
+                profiles.forEach { profile ->
+                    val apps = allProfileApps[profile.id].orEmpty()
+                    var menuExpanded by remember { mutableStateOf(false) }
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = FocusShapes.medium,
+                        color = colors.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Profile", tint = colors.textPrimary)
-                    }
-                }
-            }
-
-            if (currentProfile != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Profile configuration card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = currentProfile.name,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = colors.textPrimary
-                                )
-                                if (activeSession == null) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    IconButton(
-                                        onClick = { showDeleteConfirmDialog = true },
-                                        modifier = Modifier.size(26.dp)
+                        Column(modifier = Modifier.padding(FocusSpacing.md)) {
+                            // Header Row: Name + Mode Pill + Actions
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = profile.name,
+                                        style = FocusTypography.title,
+                                        color = colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Spacer(modifier = Modifier.width(FocusSpacing.sm))
+                                    Surface(
+                                        shape = FocusShapes.small,
+                                        color = colors.surfaceVariant
                                     ) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Delete Profile",
-                                            tint = colors.textMuted,
-                                            modifier = Modifier.size(18.dp)
+                                        Text(
+                                            text = if (profile.profileType == ProfileType.SCHEDULE) "Schedule" else "Focus",
+                                            style = FocusTypography.caption,
+                                            color = colors.textSecondary,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Surface(
+                                        shape = FocusShapes.small,
+                                        color = colors.surfaceVariant
+                                    ) {
+                                        Text(
+                                            text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST) "Allowlist" else "Blocklist",
+                                            style = FocusTypography.caption,
+                                            color = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST) colors.accent else colors.textSecondary,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
                                         )
                                     }
                                 }
-                            }
-                            Switch(
-                                checked = currentProfile.isEnabled,
-                                onCheckedChange = { onToggleProfile(currentProfile.id, it) },
-                                enabled = activeSession == null,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = colors.primary
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (currentProfile.blockMode == BlockMode.WHITELIST)
-                                "Whitelist Mode (Kiosk) - Only apps and domains listed below can run. All other apps on your phone are locked out."
-                            else
-                                "Blacklist Mode - Apps and domains listed below will be blocked. The rest of your phone stays completely accessible.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.textMuted
-                        )
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Mode Switcher buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                onClick = { if (activeSession == null) onSetProfileMode(currentProfile.id, BlockMode.WHITELIST) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (currentProfile.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, if (currentProfile.blockMode == BlockMode.WHITELIST) colors.primary else colors.border)
-                            ) {
-                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "Whitelist",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (currentProfile.blockMode == BlockMode.WHITELIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Switch(
+                                        checked = profile.isEnabled,
+                                        onCheckedChange = { onToggleProfile(profile.id, it) },
+                                        enabled = activeSession == null,
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = colors.accent,
+                                            uncheckedThumbColor = colors.textTertiary,
+                                            uncheckedTrackColor = colors.surfaceVariant,
+                                            uncheckedBorderColor = colors.border
+                                        )
                                     )
-                                }
-                            }
-                            Surface(
-                                onClick = { if (activeSession == null) onSetProfileMode(currentProfile.id, BlockMode.BLACKLIST) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (currentProfile.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else Color.Transparent,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, if (currentProfile.blockMode == BlockMode.BLACKLIST) colors.primary else colors.border)
-                            ) {
-                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "Blacklist",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (currentProfile.blockMode == BlockMode.BLACKLIST) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Apps Grid with "+" buttons
-                Text(
-                    text = if (currentProfile.blockMode == BlockMode.WHITELIST) "Permitted Apps (Stay Usable)" else "Blocked Apps (${packedApps.size})",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Grid of app slots (3 columns)
-                val slots = if (activeSession == null) packedApps + listOf(null) else packedApps
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    slots.chunked(3).forEach { rowApps ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            rowApps.forEach { app ->
-                                if (app != null) {
-                                    Surface(
-                                        modifier = Modifier.weight(1f).height(92.dp),
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = colors.surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                                    ) {
-                                        Box(modifier = Modifier.fillMaxSize().padding(6.dp)) {
-                                            if (activeSession == null) {
-                                                IconButton(
-                                                    onClick = { onRemoveApp(currentProfile.id, app.packageName) },
-                                                    modifier = Modifier.size(18.dp).align(Alignment.TopEnd)
-                                                ) {
-                                                    Icon(Icons.Default.Close, contentDescription = "Remove", tint = colors.textMuted, modifier = Modifier.size(14.dp))
-                                                }
-                                            }
-                                            Column(
-                                                modifier = Modifier.fillMaxSize(),
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                AppIconView(packageName = app.packageName, modifier = Modifier.size(34.dp))
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    text = app.appName,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = colors.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    textAlign = TextAlign.Center
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Add App Slot
-                                    Surface(
-                                        onClick = { onAddApps(currentProfile.id) },
-                                        modifier = Modifier.weight(1f).height(92.dp),
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = Color.Transparent,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.fillMaxSize(),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
+                                    Box {
+                                        IconButton(
+                                            onClick = { menuExpanded = true },
+                                            enabled = activeSession == null,
+                                            modifier = Modifier.size(36.dp)
                                         ) {
-                                            Icon(Icons.Default.Add, contentDescription = "Add", tint = colors.primary, modifier = Modifier.size(28.dp))
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = if (currentProfile.blockMode == BlockMode.WHITELIST) "Permit App" else "Block App",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = colors.textMuted
+                                            Icon(
+                                                imageVector = Icons.Rounded.MoreVert,
+                                                contentDescription = "Profile actions",
+                                                tint = colors.textSecondary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismissRequest = { menuExpanded = false },
+                                            modifier = Modifier.background(colors.surface)
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Edit profile", style = FocusTypography.bodyMedium, color = colors.textPrimary) },
+                                                leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp)) },
+                                                onClick = {
+                                                    menuExpanded = false
+                                                    onAddApps(profile.id)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Duplicate", style = FocusTypography.bodyMedium, color = colors.textPrimary) },
+                                                leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp)) },
+                                                onClick = {
+                                                    menuExpanded = false
+                                                    onDuplicateProfile(profile.id)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Delete", style = FocusTypography.bodyMedium, color = colors.statusDestructive) },
+                                                leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = colors.statusDestructive, modifier = Modifier.size(18.dp)) },
+                                                onClick = {
+                                                    menuExpanded = false
+                                                    profileToDelete = profile
+                                                }
                                             )
                                         }
                                     }
                                 }
                             }
-                            // Fill remaining spaces if row is incomplete
-                            repeat(3 - rowApps.size) {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
-                // Websites Section
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Websites (${packedDomains.size})",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary
-                    )
-                    if (activeSession == null) {
-                        TextButton(onClick = { showAddDomainDialog = true }) {
-                            Text("+ Add Domain", color = colors.primary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
+                            Text(
+                                text = if (profile.blockMode == BlockMode.WHITELIST || profile.listType == ListType.ALLOWLIST)
+                                    "${apps.size} permitted apps. All other apps locked."
+                                else
+                                    "${apps.size} blocked apps, ${profile.domainCount} websites.",
+                                style = FocusTypography.caption,
+                                color = colors.textSecondary
+                            )
 
-                if (packedDomains.isEmpty()) {
-                    Text(
-                        text = "No websites configured yet. Add domains like 'instagram.com' or '*.reddit.com'.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        packedDomains.forEach { domain ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                color = colors.surface,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                            ) {
+                            if (profile.profileType == ProfileType.SCHEDULE) {
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                                 ) {
-                                    Text(domain.pattern, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-                                    if (activeSession == null) {
-                                        IconButton(
-                                            onClick = { onRemoveDomain(domain.id) },
-                                            modifier = Modifier.size(24.dp)
+                                    Icon(
+                                        imageVector = Icons.Rounded.Schedule,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "${formatDaysSummary(profile.scheduleDaysMask)} • ${formatMinuteOfDayAmPm(profile.scheduleStartMinute)}–${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}",
+                                        style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                                        color = colors.textPrimary
+                                    )
+                                }
+                                Text(
+                                    text = "Next: ${formatNextScheduleRun(profile.scheduleDaysMask, profile.scheduleStartMinute)}",
+                                    style = FocusTypography.caption,
+                                    color = colors.accent
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(FocusSpacing.sm))
+
+                            // App Icon Previews Row
+                            if (apps.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                                ) {
+                                    val previewApps = apps.take(5)
+                                    previewApps.forEach { app ->
+                                        FocusAppIcon(
+                                            packageName = app.packageName,
+                                            size = 32.dp
+                                        )
+                                    }
+                                    if (apps.size > 5) {
+                                        Surface(
+                                            shape = FocusShapes.small,
+                                            color = colors.surfaceVariant
                                         ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Delete", tint = colors.textMuted, modifier = Modifier.size(16.dp))
+                                            Text(
+                                                text = "+${apps.size - 5}",
+                                                style = FocusTypography.caption,
+                                                color = colors.textSecondary,
+                                                modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 4.dp)
+                                            )
                                         }
                                     }
                                 }
+                            } else {
+                                Text(
+                                    text = "No apps configured yet",
+                                    style = FocusTypography.caption,
+                                    color = colors.textTertiary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(FocusSpacing.md))
+
+                            // Action Buttons: Activate & Edit
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
+                            ) {
+                                FocusButton(
+                                    text = if (profile.profileType == ProfileType.SCHEDULE) "Start now" else "Start focus",
+                                    onClick = { onActivateProfile(profile.id) },
+                                    enabled = activeSession == null,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                FocusOutlinedButton(
+                                    text = "Edit",
+                                    onClick = { onAddApps(profile.id) },
+                                    enabled = activeSession == null,
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(FocusSpacing.xl))
+
+        // Templates Section
+        FocusSectionHeader(
+            title = "Templates",
+            subtitle = "Preconfigured focus profiles ready to use"
+        )
+
+        Spacer(modifier = Modifier.height(FocusSpacing.sm))
+
+        Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm)) {
+            // Template 1: Work Hours
+            TemplateCard(
+                title = "Work hours",
+                subtitle = "Blocks social media, video streaming, and games.",
+                badgeText = "Blocklist",
+                isWhitelist = false,
+                onAdd = { onCreateTemplateProfile("WORK") },
+                enabled = activeSession == null
+            )
+
+            // Template 2: Sleep & Rest
+            TemplateCard(
+                title = "Sleep & Rest",
+                subtitle = "Blocks late-night streaming and endless video feeds.",
+                badgeText = "Blocklist",
+                isWhitelist = false,
+                onAdd = { onCreateTemplateProfile("SLEEP") },
+                enabled = activeSession == null
+            )
+
+            // Template 3: Deep Study
+            TemplateCard(
+                title = "Deep Study",
+                subtitle = "Locks phone down to only permitted study and reference tools.",
+                badgeText = "Allowlist",
+                isWhitelist = true,
+                onAdd = { onCreateTemplateProfile("STUDY") },
+                enabled = activeSession == null
+            )
+        }
+
+        Spacer(modifier = Modifier.height(FocusSpacing.xxl))
     }
 
+    // Create Profile Dialog
     if (showCreateDialog) {
-        var profileName by remember { mutableStateOf("") }
-        var profileMode by remember { mutableStateOf(BlockMode.WHITELIST) }
-
-        AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
-            title = { Text("New Focus Profile", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = profileName,
-                        onValueChange = { profileName = it },
-                        label = { Text("Profile Name (e.g. Deep Work, Study)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text("Blocking Mode:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = colors.textPrimary)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { profileMode = BlockMode.WHITELIST },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (profileMode == BlockMode.WHITELIST) colors.primary else colors.surface
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (profileMode == BlockMode.WHITELIST) colors.primary else colors.border),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Whitelist", color = if (profileMode == BlockMode.WHITELIST) Color.White else colors.textPrimary)
-                        }
-                        Button(
-                            onClick = { profileMode = BlockMode.BLACKLIST },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (profileMode == BlockMode.BLACKLIST) colors.primary else colors.surface
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (profileMode == BlockMode.BLACKLIST) colors.primary else colors.border),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Blacklist", color = if (profileMode == BlockMode.BLACKLIST) Color.White else colors.textPrimary)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = if (profileMode == BlockMode.WHITELIST)
-                            "Whitelist: Locks entire phone except chosen essential apps."
-                        else
-                            "Blacklist: Phone stays normal, but chosen distracting apps/sites are blocked.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (profileName.isNotBlank()) {
-                        onCreateProfile(profileName.trim(), profileMode)
-                        showCreateDialog = false
-                    }
-                }) {
-                    Text("Create", color = colors.primary, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) { Text("Cancel", color = colors.textMuted) }
-            },
-            containerColor = colors.surface,
-            shape = RoundedCornerShape(16.dp)
+        CreateProfileDialog(
+            initialType = ProfileType.FOCUS,
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { name, profileType, listType, daysMask, startMinute, endMinute ->
+                onCreateProfile(name, profileType, listType, daysMask, startMinute, endMinute)
+                showCreateDialog = false
+            }
         )
     }
 
-    if (showDeleteConfirmDialog && currentProfile != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Delete Profile", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
-            text = { Text("Are you sure you want to delete '${currentProfile.name}'? All configured apps and domains for this profile will be removed.", color = colors.textMuted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteProfile(currentProfile.id)
-                    showDeleteConfirmDialog = false
-                }) {
-                    Text("Delete", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
-                }
+    // Delete confirmation dialog
+    if (profileToDelete != null) {
+        val target = profileToDelete!!
+        FocusAlertDialog(
+            title = "Delete profile",
+            text = "Are you sure you want to delete '${target.name}'? Configured rules and apps for this profile will be removed.",
+            confirmText = "Delete",
+            isDestructive = true,
+            onConfirm = {
+                onDeleteProfile(target.id)
+                profileToDelete = null
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text("Cancel", color = colors.textMuted)
-                }
-            },
-            containerColor = colors.surface,
-            shape = RoundedCornerShape(16.dp)
-        )
-    }
-
-    if (showAddDomainDialog && currentProfile != null) {
-        var domainPattern by remember { mutableStateOf("") }
-        var isWildcard by remember { mutableStateOf(false) }
-
-        AlertDialog(
-            onDismissRequest = { showAddDomainDialog = false },
-            title = { Text("Block Domain", color = colors.textPrimary) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = domainPattern,
-                        onValueChange = { domainPattern = it },
-                        label = { Text("Domain (e.g. twitter.com or *.reddit.com)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (domainPattern.isNotBlank()) {
-                        onAddDomain(currentProfile.id, domainPattern.trim(), isWildcard)
-                        showAddDomainDialog = false
-                    }
-                }) {
-                    Text("Add", color = colors.primary, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDomainDialog = false }) { Text("Cancel", color = colors.textMuted) }
-            },
-            containerColor = colors.surface,
-            shape = RoundedCornerShape(16.dp)
+            onDismiss = {
+                profileToDelete = null
+            }
         )
     }
 }
 
+@Composable
+private fun TemplateCard(
+    title: String,
+    subtitle: String,
+    badgeText: String,
+    isWhitelist: Boolean,
+    onAdd: () -> Unit,
+    enabled: Boolean
+) {
+    val colors = FocusTheme.colors
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = FocusShapes.medium,
+        color = colors.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(FocusSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(modifier = Modifier.width(FocusSpacing.xs))
+                    Surface(
+                        shape = FocusShapes.small,
+                        color = colors.surfaceVariant
+                    ) {
+                        Text(
+                            text = badgeText,
+                            style = FocusTypography.caption,
+                            color = if (isWhitelist) colors.accent else colors.textSecondary,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = FocusTypography.caption,
+                    color = colors.textSecondary
+                )
+            }
+            Spacer(modifier = Modifier.width(FocusSpacing.sm))
+            FocusOutlinedButton(
+                text = "Use",
+                onClick = onAdd,
+                enabled = enabled
+            )
+        }
+    }
+}
+
+
 // -------------------------------------------------------------
-// TAB 3: ROUTINES (CONTROL CENTER) (Matching video frame 00:26)
+// TAB 3: SCHEDULES (Option B Minimal Design)
 // -------------------------------------------------------------
 @Composable
 private fun RoutinesTabContent(
     profiles: List<Profile>,
-    selectedProfileId: Long?,
-    schedules: List<Schedule>,
-    onSelectProfile: (Long) -> Unit,
-    onSaveSchedule: (Schedule) -> Unit,
-    onDeleteSchedule: (Long) -> Unit,
-    onNavigateToProfiles: () -> Unit,
+    allProfileApps: Map<Long, List<BlockedApp>>,
+    isProfilesLoading: Boolean,
     onAddApps: (Long) -> Unit,
-    onCreateProfile: (String, BlockMode) -> Unit,
-    onSetProfileMode: (Long, BlockMode) -> Unit
+    onToggleProfile: (Long, Boolean) -> Unit,
+    onUpdateSchedule: (Long, Int, Int, Int) -> Unit,
+    onCreateScheduleProfile: (String, ProfileType, ListType, Int, Int, Int) -> Unit,
+    onDeleteProfile: (Long) -> Unit,
+    onDuplicateProfile: (Long) -> Unit
 ) {
-    val colors = BlockitTheme.colors
-    val currentProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
-    var showCreateDialog by remember { mutableStateOf(false) }
+    val colors = FocusTheme.colors
+    val scheduleProfiles = remember(profiles) {
+        profiles.filter { it.profileType == ProfileType.SCHEDULE }
+    }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var profileToEditSchedule by remember { mutableStateOf<Profile?>(null) }
+    var profileToDelete by remember { mutableStateOf<Profile?>(null) }
 
     val presets = remember {
         listOf(
-            RoutinePresetItem("Workday", "9:00 AM - 5:00 PM (M-F)", 31, 540, 1020),
-            RoutinePresetItem("Deep Work", "8:00 AM - 12:00 PM (M-F)", 31, 480, 720),
-            RoutinePresetItem("Evening", "8:30 PM - 11:30 PM (Daily)", 127, 1230, 1410),
-            RoutinePresetItem("Sleep Window", "10:30 PM - 6:30 AM (Daily)", 127, 1350, 390),
-            RoutinePresetItem("Weekend", "10:00 AM - 6:00 PM (Sat-Sun)", 96, 600, 1080)
+            RoutinePresetItem("Workday", "9:00 AM – 5:00 PM (Mon–Fri)", 31, 540, 1020),
+            RoutinePresetItem("Deep work", "8:00 AM – 12:00 PM (Mon–Fri)", 31, 480, 720),
+            RoutinePresetItem("Evening", "8:30 PM – 11:30 PM (Daily)", 127, 1230, 1410),
+            RoutinePresetItem("Sleep", "10:30 PM – 6:30 AM (Daily)", 127, 1350, 390),
+            RoutinePresetItem("Weekend", "10:00 AM – 6:00 PM (Sat–Sun)", 96, 600, 1080)
         )
     }
 
@@ -2388,239 +2197,157 @@ private fun RoutinesTabContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.md)
     ) {
-
-        // Target Profile Selector for Routines
-        if (profiles.isNotEmpty()) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                items(profiles) { profile ->
-                    val isSelected = profile.id == currentProfile?.id
-                    Surface(
-                        onClick = { onSelectProfile(profile.id) },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) colors.primary else colors.surface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                    ) {
-                        Text(
-                            text = profile.name,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSelected) Color.White else colors.textPrimary,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                        )
-                    }
-                }
+        FocusSectionHeader(
+            title = "Schedules",
+            subtitle = "Turn focus modes on and off automatically",
+            action = {
+                FocusOutlinedButton(
+                    text = "New schedule",
+                    leadingIcon = Icons.Rounded.Add,
+                    onClick = { showCreateDialog = true }
+                )
             }
-        }
+        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(FocusSpacing.md))
+
+        // Quick Presets
+        Text(
+            text = "Quick presets",
+            style = FocusTypography.label,
+            color = colors.textSecondary
+        )
+        Spacer(modifier = Modifier.height(FocusSpacing.xs))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Control Center",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-                Text(
-                    text = "Automated schedules engage focus locks without manual intervention.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted
-                )
-            }
-            if (profiles.isNotEmpty()) {
-                IconButton(
-                    onClick = { showCreateDialog = true },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (colors.isDark) colors.surfaceVariant else CharcoalDark)
+            items(presets) { preset ->
+                Surface(
+                    onClick = {
+                        onCreateScheduleProfile(
+                            preset.name,
+                            ProfileType.SCHEDULE,
+                            ListType.BLOCKLIST,
+                            preset.daysMask,
+                            preset.startMinute,
+                            preset.endMinute
+                        )
+                    },
+                    shape = FocusShapes.small,
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.border)
                 ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Add Routine",
-                        tint = if (colors.isDark) colors.primary else Color.White
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Quick Smart Presets
-        if (profiles.isNotEmpty()) {
-            Text(
-                text = "Quick Presets",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = colors.textPrimary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(presets) { preset ->
-                    Surface(
-                        onClick = {
-                            if (currentProfile != null) {
-                                onSaveSchedule(
-                                    Schedule(
-                                        profileId = currentProfile.id,
-                                        daysOfWeekMask = preset.daysMask,
-                                        startMinuteOfDay = preset.startMinute,
-                                        endMinuteOfDay = preset.endMinute,
-                                        isEnabled = true
-                                    )
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        color = colors.surface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text(
-                                text = "+ ${preset.name}",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = colors.primary
-                            )
-                            Text(
-                                text = preset.timeRangeText,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-
-        if (profiles.isEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "No Focus Profiles Available",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "Create a focus profile first before setting up automated routines.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = onNavigateToProfiles,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
+                    Column(modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = FocusSpacing.xs)) {
                         Text(
-                            "+ Go to Profiles",
-                            color = if (colors.isDark) colors.primary else Color.White
+                            text = "+ ${preset.name}",
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.accent
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = preset.timeRangeText,
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary
                         )
                     }
                 }
             }
-        } else if (schedules.isEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "No automated routines active",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "Add a schedule to lock distractions automatically during your work or study hours.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { showCreateDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("+ Custom Routine", color = Color.White)
-                        }
-                    }
-                }
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                schedules.forEachIndexed { index, schedule ->
-                    val schedProfile = profiles.find { it.id == schedule.profileId }
-                    RoutineCard(
-                        index = index + 1,
-                        schedule = schedule,
-                        targetProfile = schedProfile,
-                        onToggle = { isEnabled ->
-                            onSaveSchedule(schedule.copy(isEnabled = isEnabled))
-                        },
-                        onDelete = { onDeleteSchedule(schedule.id) },
-                        onUpdateDays = { mask ->
-                            onSaveSchedule(schedule.copy(daysOfWeekMask = mask))
-                        },
-                        onManageApps = { profId -> onAddApps(profId) },
-                        onToggleMode = { profId, mode -> onSetProfileMode(profId, mode) }
-                    )
-                }
+        }
 
-                Spacer(modifier = Modifier.height(6.dp))
-                Button(
-                    onClick = { showCreateDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (colors.isDark) colors.surfaceVariant else CharcoalDark
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("+ Add Another Routine", color = if (colors.isDark) colors.primary else Color.White)
+        Spacer(modifier = Modifier.height(FocusSpacing.xl))
+
+        FocusSectionHeader(
+            title = "Active schedules",
+            subtitle = "Recurring automation rules"
+        )
+        Spacer(modifier = Modifier.height(FocusSpacing.sm))
+
+        if (isProfilesLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(FocusSpacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = colors.accent
+                )
+            }
+        } else if (scheduleProfiles.isEmpty()) {
+            FocusEmptyState(
+                title = "No schedules active",
+                message = "Add a schedule to automatically enforce focus rules on recurring days and times.",
+                icon = Icons.Rounded.Schedule,
+                actionButton = {
+                    FocusButton(
+                        text = "Create schedule",
+                        leadingIcon = Icons.Rounded.Add,
+                        onClick = { showCreateDialog = true }
+                    )
+                }
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)) {
+                scheduleProfiles.forEach { profile ->
+                    ScheduleProfileCard(
+                        profile = profile,
+                        apps = allProfileApps[profile.id].orEmpty(),
+                        onToggle = { isEnabled -> onToggleProfile(profile.id, isEnabled) },
+                        onEditSchedule = { profileToEditSchedule = profile },
+                        onManageApps = { onAddApps(profile.id) },
+                        onDelete = { profileToDelete = profile },
+                        onDuplicate = { onDuplicateProfile(profile.id) }
+                    )
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(FocusSpacing.xxl))
     }
 
     if (showCreateDialog) {
-        CreateRoutineDialog(
-            profiles = profiles,
-            initialProfileId = currentProfile?.id,
+        CreateProfileDialog(
+            initialType = ProfileType.SCHEDULE,
             onDismiss = { showCreateDialog = false },
-            onSaveSchedule = { newSchedule ->
-                onSaveSchedule(newSchedule)
+            onConfirm = { name, profileType, listType, daysMask, startMinute, endMinute ->
+                onCreateScheduleProfile(name, profileType, listType, daysMask, startMinute, endMinute)
                 showCreateDialog = false
+            }
+        )
+    }
+
+    if (profileToEditSchedule != null) {
+        val target = profileToEditSchedule!!
+        EditScheduleDialog(
+            profileName = target.name,
+            initialDaysMask = target.scheduleDaysMask,
+            initialStartMinute = target.scheduleStartMinute,
+            initialEndMinute = target.scheduleEndMinute,
+            onDismiss = { profileToEditSchedule = null },
+            onConfirm = { daysMask, startMinute, endMinute ->
+                onUpdateSchedule(target.id, daysMask, startMinute, endMinute)
+                profileToEditSchedule = null
+            }
+        )
+    }
+
+    if (profileToDelete != null) {
+        val target = profileToDelete!!
+        FocusAlertDialog(
+            title = "Delete schedule",
+            text = "Are you sure you want to delete '${target.name}'?",
+            confirmText = "Delete",
+            isDestructive = true,
+            onConfirm = {
+                onDeleteProfile(target.id)
+                profileToDelete = null
             },
-            onAddApps = onAddApps,
-            onCreateProfile = onCreateProfile,
-            onSetProfileMode = onSetProfileMode
+            onDismiss = { profileToDelete = null }
         )
     }
 }
@@ -2634,495 +2361,204 @@ private data class RoutinePresetItem(
 )
 
 @Composable
-private fun CreateRoutineDialog(
-    profiles: List<Profile>,
-    initialProfileId: Long?,
-    onDismiss: () -> Unit,
-    onSaveSchedule: (Schedule) -> Unit,
-    onAddApps: (Long) -> Unit,
-    onCreateProfile: (String, BlockMode) -> Unit,
-    onSetProfileMode: (Long, BlockMode) -> Unit
-) {
-    val colors = BlockitTheme.colors
-    var selectedProfileId by remember { mutableStateOf(initialProfileId ?: profiles.firstOrNull()?.id ?: 0L) }
-    var startMinute by remember { mutableIntStateOf(540) }  // 9:00 AM
-    var endMinute by remember { mutableIntStateOf(1020) }   // 5:00 PM
-    var activeTimeTab by remember { mutableIntStateOf(0) }  // 0: Start, 1: End
-    var daysMask by remember { mutableIntStateOf(31) }      // Mon-Fri default (bits 0..4)
-
-    // Inline Profile Creation State
-    var showInlineCreateProfile by remember { mutableStateOf(false) }
-    var inlineProfileName by remember { mutableStateOf("") }
-    var inlineProfileMode by remember { mutableStateOf(BlockMode.BLACKLIST) }
-
-    val selectedProfile = profiles.find { it.id == selectedProfileId } ?: profiles.firstOrNull()
-    val isOvernight = isOvernightWindow(startMinute, endMinute)
-    val dayNames = listOf("M", "T", "W", "T", "F", "S", "S")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                "Create Automated Routine",
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary
-            )
-        },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Profile Selection & Inline Creation Section
-                Text(
-                    "Profile & Mode:",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                if (showInlineCreateProfile) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (colors.isDark) colors.surfaceVariant else Color(0xFFF1F5F9),
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                "Create Profile Inline",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colors.primary
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            OutlinedTextField(
-                                value = inlineProfileName,
-                                onValueChange = { inlineProfileName = it },
-                                label = { Text("Profile Name") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(
-                                    selected = inlineProfileMode == BlockMode.BLACKLIST,
-                                    onClick = { inlineProfileMode = BlockMode.BLACKLIST },
-                                    label = { Text("Blacklist") }
-                                )
-                                FilterChip(
-                                    selected = inlineProfileMode == BlockMode.WHITELIST,
-                                    onClick = { inlineProfileMode = BlockMode.WHITELIST },
-                                    label = { Text("Whitelist") }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(onClick = { showInlineCreateProfile = false }) {
-                                    Text("Cancel", color = colors.textMuted)
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Button(
-                                    onClick = {
-                                        if (inlineProfileName.isNotBlank()) {
-                                            onCreateProfile(inlineProfileName.trim(), inlineProfileMode)
-                                            showInlineCreateProfile = false
-                                        }
-                                    },
-                                    enabled = inlineProfileName.isNotBlank(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
-                                ) {
-                                    Text("Create", color = Color.White)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            items(profiles) { profile ->
-                                val isSelected = profile.id == selectedProfileId
-                                Surface(
-                                    onClick = { selectedProfileId = profile.id },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isSelected) colors.primary else colors.surface,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-                                ) {
-                                    Text(
-                                        profile.name,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isSelected) Color.White else colors.textPrimary
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        OutlinedButton(
-                            onClick = { showInlineCreateProfile = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("+ New", fontSize = 11.sp)
-                        }
-                    }
-
-                    if (selectedProfile != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Mode toggle
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Mode: ", style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
-                                Surface(
-                                    onClick = {
-                                        val newMode = if (selectedProfile.blockMode == BlockMode.WHITELIST) BlockMode.BLACKLIST else BlockMode.WHITELIST
-                                        onSetProfileMode(selectedProfile.id, newMode)
-                                    },
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = colors.primary.copy(alpha = 0.15f)
-                                ) {
-                                    Text(
-                                        text = if (selectedProfile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = colors.primary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                    )
-                                }
-                            }
-
-                            // App manager button
-                            TextButton(
-                                onClick = { onAddApps(selectedProfile.id) },
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Text(
-                                    text = "Configure Apps (${selectedProfile.appCount})",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = colors.primary
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Time Range Display & Overnight Indicator
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${formatMinuteOfDayAmPm(startMinute)} to ${formatMinuteOfDayAmPm(endMinute)}",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = colors.primary
-                    )
-                    if (isOvernight) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = DestructiveRed.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = "Overnight Window",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = DestructiveRed,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Time Tab Selector
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = activeTimeTab == 0,
-                        onClick = { activeTimeTab = 0 },
-                        label = { Text("Start: ${formatMinuteOfDayAmPm(startMinute)}") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = activeTimeTab == 1,
-                        onClick = { activeTimeTab = 1 },
-                        label = { Text("End: ${formatMinuteOfDayAmPm(endMinute)}") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Scroll Wheel Picker
-                if (activeTimeTab == 0) {
-                    val (sH, sM, sPm) = fromMinuteOfDay(startMinute)
-                    AmPmTimeWheelPicker(
-                        hour12 = sH,
-                        minute = sM,
-                        isPm = sPm,
-                        onTimeChanged = { h, m, pm -> startMinute = toMinuteOfDay(h, m, pm) }
-                    )
-                } else {
-                    val (eH, eM, ePm) = fromMinuteOfDay(endMinute)
-                    AmPmTimeWheelPicker(
-                        hour12 = eH,
-                        minute = eM,
-                        isPm = ePm,
-                        onTimeChanged = { h, m, pm -> endMinute = toMinuteOfDay(h, m, pm) }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Days Selection (Mon to Sun)
-                Text(
-                    "Repeat On:",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    dayNames.forEachIndexed { dIndex, name ->
-                        val bit = 1 shl dIndex
-                        val isDayActive = (daysMask and bit) != 0
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (isDayActive) colors.primary
-                                    else (if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC))
-                                )
-                                .clickable { daysMask = daysMask xor bit },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = name,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (isDayActive) Color.White else colors.textPrimary
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    TextButton(onClick = { daysMask = 31 }, modifier = Modifier.weight(1f)) {
-                        Text("Mon-Fri", style = MaterialTheme.typography.labelSmall, color = colors.primary)
-                    }
-                    TextButton(onClick = { daysMask = 96 }, modifier = Modifier.weight(1f)) {
-                        Text("Weekends", style = MaterialTheme.typography.labelSmall, color = colors.primary)
-                    }
-                    TextButton(onClick = { daysMask = 127 }, modifier = Modifier.weight(1f)) {
-                        Text("Everyday", style = MaterialTheme.typography.labelSmall, color = colors.primary)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (selectedProfileId > 0 && daysMask > 0) {
-                        onSaveSchedule(
-                            Schedule(
-                                profileId = selectedProfileId,
-                                daysOfWeekMask = daysMask,
-                                startMinuteOfDay = startMinute,
-                                endMinuteOfDay = endMinute,
-                                isEnabled = true
-                            )
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Save Routine", color = Color.White)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = colors.textMuted)
-            }
-        },
-        containerColor = colors.surface,
-        shape = RoundedCornerShape(16.dp)
-    )
-}
-
-@Composable
-private fun RoutineCard(
-    index: Int,
-    schedule: Schedule,
-    targetProfile: Profile?,
+private fun ScheduleProfileCard(
+    profile: Profile,
+    apps: List<BlockedApp>,
     onToggle: (Boolean) -> Unit,
+    onEditSchedule: () -> Unit,
+    onManageApps: () -> Unit,
     onDelete: () -> Unit,
-    onUpdateDays: (Int) -> Unit,
-    onManageApps: (Long) -> Unit,
-    onToggleMode: (Long, BlockMode) -> Unit
+    onDuplicate: () -> Unit
 ) {
-    val colors = BlockitTheme.colors
-    val isOvernight = isOvernightWindow(schedule.startMinuteOfDay, schedule.endMinuteOfDay)
-    val timeRangeStr = "${formatMinuteOfDayAmPm(schedule.startMinuteOfDay)} to ${formatMinuteOfDayAmPm(schedule.endMinuteOfDay)}"
+    val colors = FocusTheme.colors
+    var menuExpanded by remember { mutableStateOf(false) }
+    val isOvernight = isOvernightWindow(profile.scheduleStartMinute, profile.scheduleEndMinute)
+    val timeRangeStr = "${formatMinuteOfDayAmPm(profile.scheduleStartMinute)} – ${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}"
+    val daysSummary = formatDaysSummary(profile.scheduleDaysMask)
 
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+        shape = FocusShapes.medium,
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.border)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(FocusSpacing.md)) {
+            // Header Row: Name + List Badge + Switch + More Actions Menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
-                        text = "ROUTINE $index",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = colors.textPrimary
+                        text = profile.name,
+                        style = FocusTypography.title,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    if (targetProfile != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            onClick = {
-                                val nextMode = if (targetProfile.blockMode == BlockMode.WHITELIST) BlockMode.BLACKLIST else BlockMode.WHITELIST
-                                onToggleMode(targetProfile.id, nextMode)
-                            },
-                            shape = RoundedCornerShape(6.dp),
-                            color = colors.primary.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text = "${targetProfile.name} (${if (targetProfile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist"})",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                                color = colors.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
+                    Spacer(modifier = Modifier.width(FocusSpacing.xs))
+                    Surface(
+                        shape = FocusShapes.small,
+                        color = colors.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST) "Allowlist" else "Blocklist",
+                            style = FocusTypography.caption,
+                            color = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST) colors.accent else colors.textSecondary,
+                            modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
+                        )
                     }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
-                        checked = schedule.isEnabled,
+                        checked = profile.isEnabled,
                         onCheckedChange = onToggle,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
-                            checkedTrackColor = colors.primary
+                            checkedTrackColor = colors.accent,
+                            uncheckedThumbColor = colors.textTertiary,
+                            uncheckedTrackColor = colors.surfaceVariant,
+                            uncheckedBorderColor = colors.border
                         )
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.textMuted, modifier = Modifier.size(18.dp))
+
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MoreVert,
+                                contentDescription = "Schedule actions",
+                                tint = colors.textSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier.background(colors.surface)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit schedule", style = FocusTypography.bodyMedium, color = colors.textPrimary) },
+                                leadingIcon = { Icon(Icons.Rounded.Schedule, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp)) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onEditSchedule()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Manage apps", style = FocusTypography.bodyMedium, color = colors.textPrimary) },
+                                leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp)) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onManageApps()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Duplicate", style = FocusTypography.bodyMedium, color = colors.textPrimary) },
+                                leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp)) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDuplicate()
+                                }
+                            )
+                            HorizontalDivider(color = colors.border)
+                            DropdownMenuItem(
+                                text = { Text("Delete", style = FocusTypography.bodyMedium, color = colors.statusDestructive) },
+                                leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = colors.statusDestructive, modifier = Modifier.size(18.dp)) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDelete()
+                                }
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
-            // Time range display: e.g. 9:00 AM to 5:00 PM
+            // Time & Days summary
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
             ) {
+                Icon(
+                    imageVector = Icons.Rounded.Schedule,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(16.dp)
+                )
                 Text(
                     text = timeRangeStr,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 20.sp
-                    ),
+                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.textPrimary
                 )
+                Text(
+                    text = "•",
+                    style = FocusTypography.bodySmall,
+                    color = colors.textTertiary
+                )
+                Text(
+                    text = daysSummary,
+                    style = FocusTypography.bodySmall,
+                    color = colors.textSecondary
+                )
                 if (isOvernight) {
+                    Spacer(modifier = Modifier.width(FocusSpacing.xs))
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = DestructiveRed.copy(alpha = 0.12f)
+                        shape = FocusShapes.small,
+                        color = colors.surfaceVariant
                     ) {
                         Text(
-                            text = "Overnight",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = DestructiveRed,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = "+1d",
+                            style = FocusTypography.caption,
+                            color = colors.accent,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
                 }
             }
 
-            if (targetProfile != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(
-                        onClick = { onManageApps(targetProfile.id) },
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text(
-                            text = "Manage Apps (${targetProfile.appCount})",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = colors.primary
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // Apps summary
+            Text(
+                text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST)
+                    if (apps.isEmpty()) "No permitted apps selected" else "${apps.size} permitted apps"
+                else
+                    if (apps.isEmpty()) "No blocked apps selected" else "${apps.size} blocked apps",
+                style = FocusTypography.caption,
+                color = colors.textSecondary
+            )
 
-            // Days of Week Chips (Mon..Sun mapping to ISO bits 0..6)
-            val days = listOf("M", "T", "W", "T", "F", "S", "S")
+            Spacer(modifier = Modifier.height(FocusSpacing.md))
+
+            // Action Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
             ) {
-                days.forEachIndexed { dIndex, letter ->
-                    val bit = 1 shl dIndex
-                    val isDayActive = (schedule.daysOfWeekMask and bit) != 0
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isDayActive) colors.primary else (if (colors.isDark) colors.surfaceVariant else Color(0xFFD6D4CC)))
-                        .clickable {
-                            val newMask = schedule.daysOfWeekMask xor bit
-                            onUpdateDays(newMask)
-                        },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = letter,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isDayActive) Color.White else colors.textPrimary
-                        )
-                    }
-                }
+                FocusOutlinedButton(
+                    text = "Edit time",
+                    leadingIcon = Icons.Rounded.Schedule,
+                    onClick = onEditSchedule,
+                    modifier = Modifier.weight(1f)
+                )
+                FocusButton(
+                    text = "Manage apps",
+                    leadingIcon = Icons.Rounded.Edit,
+                    onClick = onManageApps,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -3131,20 +2567,23 @@ private fun RoutineCard(
 // -------------------------------------------------------------
 // TAB 4: STATISTICS (Matching video frame 00:31)
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// TAB 4: STATISTICS (Option B Minimal Design)
+// -------------------------------------------------------------
 @Composable
 private fun StatisticsTabContent(
     insightsData: UsageInsightsData,
     activeSession: FocusSession? = null
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
     var selectedFilter by remember { mutableIntStateOf(0) } // 0: Week, 1: Month, 2: Year
     val currentMonthYear = remember {
-        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date()).uppercase()
+        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date())
     }
 
     val liveSessionMinutes = if (activeSession != null) {
         val elapsedMs = (System.currentTimeMillis() - activeSession.startTimestamp).coerceAtLeast(0L)
-        (elapsedMs / 1000 / 60).toInt()
+        ((elapsedMs + 59_999L) / 60_000L).toInt().coerceAtLeast(1)
     } else 0
     val liveTotalFocusMinutes = insightsData.totalFocusMinutes + liveSessionMinutes
     val liveFormattedFocusTime = TimeSavedCalculator.formatMinutes(liveTotalFocusMinutes)
@@ -3154,7 +2593,7 @@ private fun StatisticsTabContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.md)
     ) {
         // Date Header
         Row(
@@ -3164,62 +2603,62 @@ private fun StatisticsTabContent(
         ) {
             Text(
                 text = currentMonthYear,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                ),
+                style = FocusTypography.headline,
                 color = colors.textPrimary
             )
-            Text(
-                text = "$liveFormattedFocusTime FOCUSED",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Black
-                ),
-                color = colors.primary
-            )
+            Surface(
+                shape = FocusShapes.small,
+                color = colors.primary.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    text = "$liveFormattedFocusTime focused",
+                    style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.primary,
+                    modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = 4.dp)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(FocusSpacing.md))
 
         // Period filter buttons: Week, Month, Year
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
         ) {
             listOf("Week", "Month", "Year").forEachIndexed { index, label ->
                 val isSelected = selectedFilter == index
                 Surface(
                     onClick = { selectedFilter = index },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isSelected) (if (colors.isDark) colors.surfaceVariant else CharcoalDark) else colors.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
+                    shape = FocusShapes.small,
+                    color = if (isSelected) colors.primary else colors.surface,
+                    border = BorderStroke(1.dp, if (isSelected) colors.primary else colors.border),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.padding(vertical = FocusSpacing.sm), contentAlignment = Alignment.Center) {
                         Text(
                             text = label,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSelected) (if (colors.isDark) colors.primary else Color.White) else colors.textPrimary
+                            style = FocusTypography.caption.copy(fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal),
+                            color = if (isSelected) Color.White else colors.textPrimary
                         )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
         // Real Histogram / Bar Chart with Labeled Axes
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = FocusShapes.medium,
             colors = CardDefaults.cardColors(containerColor = colors.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+            border = BorderStroke(1.dp, colors.border)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(FocusSpacing.md)
             ) {
                 val (activitySubtitle, activityBars) = remember(selectedFilter, insightsData.recentEvents) {
                     val now = System.currentTimeMillis()
@@ -3243,10 +2682,10 @@ private fun StatisticsTabContent(
                                 }
                                 val end: Long = endCal.timeInMillis
                                 val count = events.count { it.timestamp in start until end }
-                                val label = dayFormat.format(Date(start)).take(3).uppercase()
+                                val label = dayFormat.format(Date(start)).take(3)
                                 ActivityBarData(label, count, i == 0)
                             }
-                            Pair("Real logged intercepts across the past 7 days.", bars)
+                            Pair("Logged intercepts across the past 7 days.", bars)
                         }
                         1 -> { // Month (past 4 weeks)
                             val bars = (3 downTo 0).map { i ->
@@ -3255,7 +2694,7 @@ private fun StatisticsTabContent(
                                 val count = events.count { it.timestamp in start until end }
                                 ActivityBarData("W${4 - i}", count, i == 0)
                             }
-                            Pair("Real logged intercepts grouped by week (past 4 weeks).", bars)
+                            Pair("Logged intercepts grouped by week (past 4 weeks).", bars)
                         }
                         else -> { // Year (past 6 months)
                             val monthFormat = SimpleDateFormat("MMM", Locale.getDefault())
@@ -3276,9 +2715,9 @@ private fun StatisticsTabContent(
                                 }
                                 val end: Long = endCal.timeInMillis
                                 val count = events.count { it.timestamp in start until end }
-                                ActivityBarData(monthFormat.format(Date(start)).uppercase(), count, i == 0)
+                                ActivityBarData(monthFormat.format(Date(start)), count, i == 0)
                             }
-                            Pair("Real logged intercepts across the past 6 months.", bars)
+                            Pair("Logged intercepts across the past 6 months.", bars)
                         }
                     }
                 }
@@ -3294,29 +2733,26 @@ private fun StatisticsTabContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Intercept Activity",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        text = "Intercept activity",
+                        style = FocusTypography.title,
                         color = colors.textPrimary
                     )
                     if (maxVal > 0) {
                         Text(
-                            text = "Peak: $maxVal in period",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold
-                            ),
+                            text = "Peak: $maxVal",
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
                             color = colors.primary
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = activitySubtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = FocusTypography.bodySmall,
                     color = colors.textMuted
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.md))
 
                 Row(
                     modifier = Modifier
@@ -3332,7 +2768,7 @@ private fun StatisticsTabContent(
                         ) {
                             Text(
                                 text = "No activity recorded for this period",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = FocusTypography.bodySmall,
                                 color = colors.textMuted
                             )
                         }
@@ -3360,10 +2796,9 @@ private fun StatisticsTabContent(
                                         if (bar.count > 0) {
                                             Text(
                                                 text = "${bar.count}",
-                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                style = FocusTypography.caption.copy(
                                                     fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontFamily = FontFamily.Monospace
+                                                    fontWeight = FontWeight.Bold
                                                 ),
                                                 color = colors.primary
                                             )
@@ -3377,21 +2812,21 @@ private fun StatisticsTabContent(
                                                 .background(
                                                     if (bar.count > 0) colors.primary
                                                     else if (bar.isCurrent) colors.primary.copy(alpha = 0.35f)
-                                                    else if (colors.isDark) colors.surfaceVariant else CharcoalDark.copy(alpha = 0.15f)
+                                                    else colors.surfaceVariant
                                                 )
                                         )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
-                                // Guaranteed visible day label
+                                // Every bar has a clearly rendered day label
                                 Text(
                                     text = bar.label,
                                     maxLines = 1,
+                                    softWrap = false,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 10.sp,
-                                        fontWeight = if (bar.isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                        fontFamily = FontFamily.Monospace
+                                    style = FocusTypography.caption.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = if (bar.isCurrent) FontWeight.Bold else FontWeight.Normal
                                     ),
                                     color = if (bar.isCurrent) colors.primary else colors.textMuted
                                 )
@@ -3403,113 +2838,99 @@ private fun StatisticsTabContent(
         }
 
         if (!hasData) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.5f)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = "Clean slate. Start a focus session to block distracting apps and track your stats here.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(FocusSpacing.md))
+            FocusEmptyState(
+                title = "No activity yet",
+                message = "Start a focus session to block distracting apps and track your stats here."
+            )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
-        // Summary Metric Tiles (Real data only)
+        // Summary Metric Tiles
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
         ) {
             MetricCard(
-                title = "Total Intercepts",
+                title = "Total intercepts",
                 value = "${insightsData.totalBlocked}",
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
-                title = "Focus Time",
+                title = "Focus time",
                 value = liveFormattedFocusTime,
                 modifier = Modifier.weight(1f)
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
         ) {
             MetricCard(
-                title = "Blocked Today",
+                title = "Blocked today",
                 value = "${insightsData.blockedToday}",
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
-                title = "Apps Protected",
+                title = "Apps protected",
                 value = "${insightsData.topTargets.size}",
                 modifier = Modifier.weight(1f)
             )
         }
 
-        // Top Intercepted Apps (Real list from DB)
+        // Top Intercepted Apps
         if (insightsData.topTargets.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "Most Intercepted",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = colors.textPrimary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.lg))
+            FocusSectionHeader(title = "Most intercepted")
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = FocusShapes.medium,
                 colors = CardDefaults.cardColors(containerColor = colors.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                border = BorderStroke(1.dp, colors.border)
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(FocusSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                 ) {
                     insightsData.topTargets.take(5).forEach { target ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = FocusSpacing.xs, horizontal = FocusSpacing.xs),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
                                 modifier = Modifier.weight(1f)
                             ) {
                                 if (target.targetType == "APP") {
-                                    AppIconView(packageName = target.identifier, modifier = Modifier.size(28.dp))
+                                    FocusAppIcon(packageName = target.identifier, modifier = Modifier.size(28.dp))
                                 } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Shield,
-                                        contentDescription = null,
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(28.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(FocusShapes.small)
+                                            .background(colors.surfaceVariant),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Shield,
+                                            contentDescription = null,
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                                 Text(
                                     text = target.displayName,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = FocusTypography.bodyMedium,
                                     color = colors.textPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -3517,10 +2938,7 @@ private fun StatisticsTabContent(
                             }
                             Text(
                                 text = "${target.count} blocked",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold
-                                ),
+                                style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
                                 color = colors.primary
                             )
                         }
@@ -3537,60 +2955,20 @@ private fun MetricCard(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        shape = FocusShapes.medium,
         colors = CardDefaults.cardColors(containerColor = colors.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+        border = BorderStroke(1.dp, colors.border)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.labelSmall, color = colors.textMuted)
-            Spacer(modifier = Modifier.height(4.dp))
+        Column(modifier = Modifier.padding(FocusSpacing.md)) {
+            Text(title, style = FocusTypography.caption, color = colors.textMuted)
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
             Text(
                 text = value,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Black
-                ),
+                style = FocusTypography.headline,
                 color = colors.textPrimary
-            )
-        }
-    }
-}
-
-@Composable
-private fun AppIconView(packageName: String, modifier: Modifier = Modifier) {
-    val colors = BlockitTheme.colors
-    val context = LocalContext.current
-    val iconBitmap = remember(packageName) {
-        try {
-            val drawable = context.packageManager.getApplicationIcon(packageName)
-            val bitmap = Bitmap.createBitmap(
-                drawable.intrinsicWidth.coerceAtLeast(1),
-                drawable.intrinsicHeight.coerceAtLeast(1),
-                Bitmap.Config.ARGB_8888
-            )
-            val canvas = Canvas(bitmap)
-            drawable.setBounds(0, 0, canvas.width, canvas.height)
-            drawable.draw(canvas)
-            bitmap.asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    if (iconBitmap != null) {
-        Image(bitmap = iconBitmap, contentDescription = null, modifier = modifier)
-    } else {
-        Box(
-            modifier = modifier.clip(RoundedCornerShape(8.dp)).background(colors.primary),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = packageName.takeLast(1).uppercase(),
-                color = Color.White,
-                fontWeight = FontWeight.Bold
             )
         }
     }

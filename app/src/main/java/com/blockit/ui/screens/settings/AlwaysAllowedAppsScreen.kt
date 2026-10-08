@@ -1,11 +1,8 @@
 package com.blockit.ui.screens.settings
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,25 +15,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,10 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,10 +46,14 @@ import com.blockit.core.system.SystemAppResolver
 import com.blockit.data.repository.InstalledAppsRepository
 import com.blockit.domain.evaluator.RuleEvaluator
 import com.blockit.domain.model.InstalledAppInfo
-import com.blockit.ui.theme.BlockitTheme
+import com.blockit.ui.components.FocusAppIcon
+import com.blockit.ui.components.FocusTopBar
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlwaysAllowedAppsScreen(
     systemAppResolver: SystemAppResolver,
@@ -69,8 +62,7 @@ fun AlwaysAllowedAppsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
     val scope = rememberCoroutineScope()
 
     var searchQuery by remember { mutableStateOf("") }
@@ -97,56 +89,48 @@ fun AlwaysAllowedAppsScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = { Text("Always Allowed Apps") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+            FocusTopBar(
+                title = "Always allowed apps",
+                onBackClick = onBackClick
             )
-        }
+        },
+        containerColor = colors.background
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = FocusSpacing.lg)
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = FocusSpacing.sm),
                 colors = CardDefaults.cardColors(containerColor = colors.surface),
-                shape = RoundedCornerShape(12.dp)
+                shape = FocusShapes.medium,
+                border = BorderStroke(1.dp, colors.border)
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier.padding(FocusSpacing.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Phone,
                         contentDescription = null,
                         tint = colors.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.sm))
                     Column {
                         Text(
-                            text = "Emergency & Essential Apps",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            text = "Essential and emergency apps",
+                            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Apps selected here remain accessible during both Whitelist and Blacklist focus sessions.",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "Selected apps remain usable at all times, including during lockdown whitelist sessions.",
+                            style = FocusTypography.caption,
                             color = colors.textMuted
                         )
                     }
@@ -158,17 +142,24 @@ fun AlwaysAllowedAppsScreen(
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                placeholder = { Text("Search installed apps...") },
+                    .padding(vertical = FocusSpacing.xs),
+                placeholder = { Text("Search installed apps", style = FocusTypography.bodySmall) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search",
-                        tint = colors.textMuted
+                        tint = colors.textMuted,
+                        modifier = Modifier.size(18.dp)
                     )
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp)
+                shape = FocusShapes.small,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.border,
+                    focusedContainerColor = colors.surface,
+                    unfocusedContainerColor = colors.surface
+                )
             )
 
             if (isLoading) {
@@ -206,34 +197,40 @@ fun AlwaysAllowedAppsScreen(
                                         }
                                     }
                                 }
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                                .padding(vertical = FocusSpacing.sm, horizontal = FocusSpacing.xs),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AppIconThumbnail(context = context, packageName = app.packageName)
+                            FocusAppIcon(packageName = app.packageName, modifier = Modifier.size(36.dp))
 
-                            Spacer(modifier = Modifier.width(14.dp))
+                            Spacer(modifier = Modifier.width(FocusSpacing.sm))
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = app.appName,
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                         color = colors.textPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     if (isDialer) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "(Default Dialer)",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = colors.primary
-                                        )
+                                        Spacer(modifier = Modifier.width(FocusSpacing.xs))
+                                        Surface(
+                                            shape = FocusShapes.small,
+                                            color = colors.primary.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = "Default dialer",
+                                                style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                                                color = colors.primary,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
                                     }
                                 }
                                 Text(
                                     text = app.packageName,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = FocusTypography.caption,
                                     color = colors.textMuted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -257,57 +254,16 @@ fun AlwaysAllowedAppsScreen(
                                             ruleEvaluator.refreshRules()
                                         }
                                     }
-                                }
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = colors.primary,
+                                    uncheckedColor = colors.textMuted
+                                )
                             )
                         }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun AppIconThumbnail(context: Context, packageName: String) {
-    val colors = BlockitTheme.colors
-    val iconBitmap = remember(packageName) {
-        try {
-            val pm = context.packageManager
-            val drawable = pm.getApplicationIcon(packageName)
-            val bitmap = Bitmap.createBitmap(
-                drawable.intrinsicWidth.coerceAtLeast(1),
-                drawable.intrinsicHeight.coerceAtLeast(1),
-                Bitmap.Config.ARGB_8888
-            )
-            val canvas = Canvas(bitmap)
-            drawable.setBounds(0, 0, canvas.width, canvas.height)
-            drawable.draw(canvas)
-            bitmap.asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.surfaceVariant),
-        contentAlignment = Alignment.Center
-    ) {
-        if (iconBitmap != null) {
-            Image(
-                bitmap = iconBitmap,
-                contentDescription = null,
-                modifier = Modifier.size(34.dp)
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.Shield,
-                contentDescription = null,
-                tint = colors.textMuted,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }

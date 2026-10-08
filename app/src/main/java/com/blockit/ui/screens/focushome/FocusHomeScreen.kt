@@ -18,27 +18,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,17 +49,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.SessionStrictness
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusDestructiveButton
+import com.blockit.ui.components.FocusMonolithMark
+import com.blockit.ui.components.FocusOutlinedButton
 import com.blockit.ui.components.StopSessionFrictionDialog
-import com.blockit.ui.theme.BlockitTheme
-import com.blockit.ui.theme.DestructiveRed
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 import kotlinx.coroutines.delay
 
 data class WhitelistAppInfo(
@@ -85,15 +83,20 @@ fun FocusHomeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
 
     // Intercept back button completely to hold kiosk lock
     BackHandler(enabled = true) {
-        // Trapped inside Focus Home during Whitelist lockdown
+        // Trapped inside Focus Home during Allowlist lockdown
     }
 
+    var hasEverObservedSession by remember { mutableStateOf(false) }
+
     LaunchedEffect(session) {
-        if (session == null) {
+        if (session != null) {
+            hasEverObservedSession = true
+        } else if (hasEverObservedSession) {
+            // Trigger expiry only when an active session was previously present and has now ended
             onSessionExpired()
         }
     }
@@ -112,6 +115,12 @@ fun FocusHomeScreen(
         } else 0L
     }
 
+    LaunchedEffect(hasEverObservedSession, session, remainingMs) {
+        if (hasEverObservedSession && session != null && remainingMs <= 0L) {
+            onSessionExpired()
+        }
+    }
+
     val totalDurationMs = remember(session) {
         if (session != null) {
             (session.endTimestamp - session.startTimestamp).coerceAtLeast(1000L)
@@ -125,39 +134,26 @@ fun FocusHomeScreen(
     val remainingHours = remainingMs / (1000 * 60 * 60)
 
     val timerText = if (remainingHours > 0) {
-        String.format("%02d:%02d:%02d", remainingHours, remainingMinutes, remainingSeconds)
+        String.format("%d:%02d:%02d", remainingHours, remainingMinutes, remainingSeconds)
     } else {
         String.format("%02d:%02d", remainingMinutes, remainingSeconds)
     }
 
     var showStopDialog by remember { mutableStateOf(false) }
 
-    // Load permitted app metadata
-    val permittedApps = remember(permittedPackages) {
-        val pm = context.packageManager
-        permittedPackages.mapNotNull { pkg ->
-            try {
-                val appInfo = pm.getApplicationInfo(pkg, 0)
-                val label = pm.getApplicationLabel(appInfo).toString()
-                val icon = try {
-                    val drawable = pm.getApplicationIcon(appInfo)
-                    val bitmap = Bitmap.createBitmap(
-                        drawable.intrinsicWidth.coerceAtLeast(1),
-                        drawable.intrinsicHeight.coerceAtLeast(1),
-                        Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = Canvas(bitmap)
-                    drawable.setBounds(0, 0, canvas.width, canvas.height)
-                    drawable.draw(canvas)
-                    bitmap.asImageBitmap()
-                } catch (_: Exception) {
-                    null
-                }
-                WhitelistAppInfo(pkg, label, icon)
-            } catch (_: Exception) {
-                null
-            }
-        }.sortedBy { it.appName.lowercase() }
+    // Load permitted app metadata asynchronously on IO dispatcher
+    val permittedApps by androidx.compose.runtime.produceState<List<WhitelistAppInfo>>(
+        initialValue = emptyList(),
+        key1 = permittedPackages
+    ) {
+        val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            permittedPackages.map { pkg ->
+                val label = com.blockit.core.cache.AppIconCache.getLabel(context, pkg)
+                val icon = com.blockit.core.cache.AppIconCache.getIcon(context, pkg)
+                WhitelistAppInfo(pkg, label.ifBlank { pkg }, icon)
+            }.sortedBy { it.appName.lowercase() }
+        }
+        value = list
     }
 
     Surface(
@@ -167,116 +163,116 @@ fun FocusHomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(FocusSpacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Status Bar: Monospace Timer & Shield Badge
-            Card(
+            // Top Status Bar: Timer & Monolith Badge
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, colors.border, RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                shape = RoundedCornerShape(16.dp)
+                    .clip(FocusShapes.medium)
+                    .border(1.dp, colors.border, FocusShapes.medium),
+                color = colors.surface,
+                shape = FocusShapes.medium
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
+                        .padding(FocusSpacing.lg),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(20.dp)
+                        FocusMonolithMark(
+                            size = 18.dp,
+                            tint = colors.accent
                         )
                         Text(
-                            text = profileName.ifBlank { "Whitelist Focus" }.uppercase(),
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.2.sp
-                            ),
+                            text = profileName.ifBlank { "Allowlist focus" },
+                            style = FocusTypography.title,
                             color = colors.textPrimary
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.md))
 
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(140.dp)
+                        modifier = Modifier.size(130.dp)
                     ) {
+                        CircularProgressIndicator(
+                            progress = { 1f },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 6.dp,
+                            color = colors.surfaceVariant,
+                            trackColor = Color.Transparent
+                        )
                         CircularProgressIndicator(
                             progress = { progress },
                             modifier = Modifier.fillMaxSize(),
                             strokeWidth = 6.dp,
-                            color = colors.primary,
-                            trackColor = colors.surfaceVariant
+                            color = colors.accent,
+                            trackColor = Color.Transparent
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = timerText,
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold
-                                ),
+                                style = FocusTypography.headline,
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "REMAINING",
-                                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                                color = colors.textMuted
+                                text = "remaining",
+                                style = FocusTypography.caption,
+                                color = colors.textSecondary
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
                     Text(
-                        text = "Whitelist Lockdown Active: only permitted apps are launchable.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textMuted,
+                        text = "Allowlist lockdown active: only permitted apps are launchable.",
+                        style = FocusTypography.caption,
+                        color = colors.textSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
-            // Permitted Apps Grid
+            // Permitted Apps Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "PERMITTED APPS (${permittedApps.size})",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = colors.textMuted
+                    text = "Permitted apps (${permittedApps.size})",
+                    style = FocusTypography.label,
+                    color = colors.textSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
             if (permittedApps.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .background(colors.surface, RoundedCornerShape(14.dp))
-                        .border(1.dp, colors.border, RoundedCornerShape(14.dp)),
+                        .clip(FocusShapes.medium)
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, FocusShapes.medium),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No additional apps permitted in this profile.\nUse Emergency Phone below if required.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.textMuted,
+                        text = "No additional apps permitted in this profile.\nUse Phone below if required.",
+                        style = FocusTypography.body,
+                        color = colors.textSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -286,14 +282,15 @@ fun FocusHomeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp)
+                    verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
+                    contentPadding = PaddingValues(vertical = FocusSpacing.xxs)
                 ) {
                     items(permittedApps, key = { it.packageName }) { app ->
                         PermittedAppTile(
                             app = app,
                             onClick = {
+                                com.blockit.core.engine.EngineLifecycleMonitor.markPermittedAppLaunched(app.packageName)
                                 val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
                                 if (launchIntent != null) {
                                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -305,71 +302,42 @@ fun FocusHomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.md))
 
             // Bottom Actions: Large Emergency Dialer + Stop Session
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
             ) {
-                // Large Emergency Phone Button
-                Button(
+                // Phone Button
+                FocusButton(
+                    text = "Phone / Dialer",
+                    leadingIcon = Icons.Rounded.Phone,
                     onClick = {
+                        val dialerPkg = com.blockit.core.system.AndroidSystemAppResolver(context).getDefaultDialerPackage() ?: "com.android.dialer"
+                        com.blockit.core.engine.EngineLifecycleMonitor.markPermittedAppLaunched(dialerPkg)
                         val dialIntent = Intent(Intent.ACTION_DIAL).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(dialIntent)
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.primary,
-                        contentColor = Color.White
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Phone,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Emergency Phone / Dialer",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 // Stop Focus Session with friction
-                OutlinedButton(
-                    onClick = { showStopDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (strictness == SessionStrictness.LOCKED) colors.textMuted else DestructiveRed
-                    ),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(
-                            if (strictness == SessionStrictness.LOCKED) colors.border else DestructiveRed.copy(alpha = 0.5f)
-                        )
+                if (strictness == SessionStrictness.LOCKED) {
+                    FocusOutlinedButton(
+                        text = "Locked until timer expires",
+                        leadingIcon = Icons.Rounded.Lock,
+                        onClick = { showStopDialog = true },
+                        modifier = Modifier.fillMaxWidth()
                     )
-                ) {
-                    Icon(
-                        imageVector = if (strictness == SessionStrictness.LOCKED) Icons.Default.Lock else Icons.Default.Stop,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = when (strictness) {
-                            SessionStrictness.LOCKED -> "Locked Until Timer Expires"
-                            SessionStrictness.STRICT -> "Stop Focus (Strict Challenge)"
-                            SessionStrictness.NORMAL -> "Stop Focus Early"
-                        },
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                } else {
+                    FocusDestructiveButton(
+                        text = if (strictness == SessionStrictness.STRICT) "Stop focus (strict challenge)" else "Stop focus early",
+                        leadingIcon = Icons.Rounded.Stop,
+                        onClick = { showStopDialog = true },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -394,27 +362,28 @@ private fun PermittedAppTile(
     app: WhitelistAppInfo,
     onClick: () -> Unit
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .border(1.dp, colors.border, RoundedCornerShape(14.dp)),
-        colors = CardDefaults.cardColors(containerColor = colors.surface),
-        shape = RoundedCornerShape(14.dp)
+            .clip(FocusShapes.medium)
+            .border(1.dp, colors.border, FocusShapes.medium)
+            .clickable(onClick = onClick),
+        color = colors.surface,
+        shape = FocusShapes.medium
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(FocusSpacing.sm),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(48.dp)
+                    .clip(FocusShapes.small)
                     .background(colors.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
@@ -422,23 +391,21 @@ private fun PermittedAppTile(
                     Image(
                         bitmap = app.iconBitmap,
                         contentDescription = app.appName,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(38.dp)
                     )
                 } else {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = null,
-                        tint = colors.textMuted,
-                        modifier = Modifier.size(28.dp)
+                    FocusMonolithMark(
+                        size = 20.dp,
+                        tint = colors.textTertiary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
             Text(
                 text = app.appName,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
                 color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

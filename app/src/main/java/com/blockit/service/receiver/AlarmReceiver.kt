@@ -18,7 +18,18 @@ class AlarmReceiver : BroadcastReceiver() {
             // 2. Refresh active rules in engine
             container.ruleEvaluator.refreshRules()
 
-            // 3. Re-arm next boundary alarm
+            // 3. Enforce Focus Home lockdown if Allowlist schedule triggered
+            val snapshot = container.ruleEvaluator.getSnapshot()
+            if (snapshot.hasActiveWhitelist) {
+                try {
+                    val homeIntent = Intent(context, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    context.startActivity(homeIntent)
+                } catch (_: Exception) {}
+            }
+
+            // 4. Re-arm next boundary alarm
             container.scheduleManager.scheduleNextBoundaryAlarm()
         }
     }

@@ -17,13 +17,12 @@ class BootReceiver : BroadcastReceiver() {
         ) {
             val container = BlockItApplication.from(context)
             container.applicationScope.launch {
-                // Re-evaluate and re-prime the rule cache following system restart or time shifts
-                container.ruleEvaluator.refreshRules()
-                container.scheduleManager.scheduleNextBoundaryAlarm()
-                container.focusSessionManager.restoreActiveSessionNotification()
+                // Reconcile focus sessions: purge expired sessions, re-arm alarms, resume active sessions
+                val now = System.currentTimeMillis()
+                val reconcileResult = container.focusSessionManager.reconcileSessionOnBoot(now)
 
                 val snapshot = container.ruleEvaluator.getSnapshot()
-                if (snapshot.hasActiveWhitelist) {
+                if (snapshot.hasActiveWhitelist && reconcileResult.hasActiveSession) {
                     val homeIntent = Intent(context, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }

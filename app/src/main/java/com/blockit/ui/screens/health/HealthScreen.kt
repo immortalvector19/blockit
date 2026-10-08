@@ -6,8 +6,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,10 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CheckCircle
@@ -32,20 +30,13 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -60,19 +51,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.blockit.core.BlockItApplication
 import com.blockit.core.health.BlockHealthMonitor
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.components.FocusTopBar
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HealthScreen(
     onBackClick: () -> Unit,
@@ -80,6 +75,7 @@ fun HealthScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val colors = FocusTheme.colors
 
     val healthSnapshot by BlockHealthMonitor.snapshot.collectAsState()
     val appContainer = remember { BlockItApplication.from(context) }
@@ -101,54 +97,48 @@ fun HealthScreen(
         isOverlayGranted = Settings.canDrawOverlays(context)
 
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        isBatteryExempt = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
-
-        BlockHealthMonitor.updatePermissions(isOverlayGranted, isBatteryExempt)
+        isBatteryExempt = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
     }
 
-    // Re-check all states on every onResume
     DisposableEffect(lifecycleOwner) {
-        refreshLiveStates()
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshLiveStates()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        refreshLiveStates()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = { Text("Engine Health & Diagnostics", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
+            FocusTopBar(
+                title = "System health",
+                onBackClick = onBackClick,
                 actions = {
                     IconButton(onClick = { refreshLiveStates() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = colors.textPrimary
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                }
             )
-        }
+        },
+        containerColor = colors.background
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)
         ) {
             // Live Status Banner
             HealthSummaryBanner(
@@ -157,55 +147,52 @@ fun HealthScreen(
 
             // Diagnostic Trigger: Test Block Now
             Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                shape = FocusShapes.medium,
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.border),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(FocusSpacing.md)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = null,
-                            tint = Color(0xFF3DDC97),
-                            modifier = Modifier.size(24.dp)
+                            tint = colors.primary,
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(FocusSpacing.xs))
                         Text(
-                            text = "Real-Time Block Verification",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = "Block screen verification",
+                            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.xs))
                     Text(
-                        text = "Trigger an immediate test block overlay on this screen to verify WindowManager attachment, touch handling, and dismiss behavior without switching apps.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Trigger an immediate test block screen to verify WindowManager attachment and touch handling without switching apps.",
+                        style = FocusTypography.caption,
+                        color = colors.textMuted
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
+                    Spacer(modifier = Modifier.height(FocusSpacing.md))
+                    FocusButton(
+                        text = "Test block screen",
                         onClick = {
                             val trigger = BlockHealthMonitor.testBlockTrigger
                             if (trigger != null) {
                                 trigger.invoke()
                             } else {
                                 appContainer.overlayController.showBlockOverlay(
-                                    targetIdentifier = "Diagnostics Test",
-                                    profileName = "FocusShield Diagnostics",
-                                    reason = "Manual test block triggered from Health Screen",
+                                    targetIdentifier = "Diagnostics test",
+                                    profileName = "FocusShield",
+                                    reason = "Manual test block triggered from health screen",
                                     onHomeClicked = {
                                         appContainer.overlayController.hideBlockOverlay()
                                     }
                                 )
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3DDC97)),
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Test Block Now", color = Color(0xFF0E1621), fontWeight = FontWeight.Bold)
-                    }
+                    )
                 }
             }
 
@@ -220,15 +207,15 @@ fun HealthScreen(
 
             HealthItemCard(
                 icon = Icons.Default.AccessibilityNew,
-                title = "Accessibility Engine",
+                title = "Accessibility service",
                 isHealthy = isAccessibilityRunning,
-                statusText = if (isAccessibilityRunning) "Connected & Listening" else "Disconnected / Action Required",
+                statusText = if (isAccessibilityRunning) "Connected" else "Needs setup",
                 details = listOf(
-                    "Service Process" to if (isAccessibilityRunning) "Active in Background" else "Inactive",
-                    "Last Event Timestamp" to lastEventText,
-                    "Last Package Seen" to if (healthSnapshot.lastPackageSeen.isNotBlank()) healthSnapshot.lastPackageSeen else "None yet"
+                    "Service state" to if (isAccessibilityRunning) "Active" else "Inactive",
+                    "Last event" to lastEventText,
+                    "Last app detected" to if (healthSnapshot.lastPackageSeen.isNotBlank()) healthSnapshot.lastPackageSeen else "None yet"
                 ),
-                actionText = if (!isAccessibilityRunning) "Open Accessibility Settings" else null,
+                actionText = if (!isAccessibilityRunning) "Open accessibility settings" else null,
                 onAction = {
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -239,76 +226,56 @@ fun HealthScreen(
             // 2. WindowManager Overlay Permission
             HealthItemCard(
                 icon = Icons.Default.Layers,
-                title = "Display Over Other Apps (Overlay)",
+                title = "Display over other apps",
                 isHealthy = isOverlayGranted,
-                statusText = if (isOverlayGranted) "Granted (SYSTEM_ALERT_WINDOW)" else "Missing Permission",
+                statusText = if (isOverlayGranted) "Granted" else "Needs setup",
                 details = listOf(
-                    "Window Type" to "TYPE_APPLICATION_OVERLAY",
-                    "Render Engine" to "Hardware-Accelerated Jetpack Compose"
+                    "Overlay permission" to if (isOverlayGranted) "Granted" else "Missing"
                 ),
-                actionText = if (!isOverlayGranted) "Grant Overlay Permission" else null,
+                actionText = if (!isOverlayGranted) "Grant overlay permission" else null,
                 onAction = {
                     val intent = Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.fromParts("package", context.packageName, null)
-                    ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
-                    context.startActivity(intent)
+                        Uri.parse("package:${context.packageName}")
+                    ).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    try {
+                        context.startActivity(intent)
+                    } catch (_: Exception) {
+                        context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        })
+                    }
                 }
             )
 
             // 3. Battery Optimization Exemption
             HealthItemCard(
                 icon = Icons.Default.BatteryChargingFull,
-                title = "Battery Optimization Exemption",
+                title = "Battery optimization",
                 isHealthy = isBatteryExempt,
-                statusText = if (isBatteryExempt) "Exempted (Unrestricted)" else "Optimized (Risk of OS Termination)",
+                statusText = if (isBatteryExempt) "Exempt" else "Needs setup",
                 details = listOf(
-                    "System API" to "PowerManager.isIgnoringBatteryOptimizations()",
-                    "Status" to if (isBatteryExempt) "Background activity protected" else "May be killed in deep sleep"
+                    "Standby exemption" to if (isBatteryExempt) "Unrestricted" else "Optimized (risk of background kill)"
                 ),
-                actionText = if (!isBatteryExempt) "Exempt FocusShield" else null,
+                actionText = if (!isBatteryExempt) "Request battery exemption" else null,
                 onAction = {
-                    try {
-                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
                         }
-                        context.startActivity(intent)
-                    } catch (_: Exception) {
-                        val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }
-                        context.startActivity(fallback)
                     }
                 }
-            )
-
-            // 4. Active Rules & Loaded Blocklist Telemetry
-            val currentSnapshot = appContainer.ruleEvaluator.getSnapshot()
-            val totalLoaded = if (currentSnapshot.hasActiveWhitelist) {
-                currentSnapshot.whitelistPackages.size
-            } else {
-                currentSnapshot.blockedPackages.size
-            }
-
-            HealthItemCard(
-                icon = Icons.Default.Shield,
-                title = "Active Rules & Blocklist Telemetry",
-                isHealthy = totalLoaded > 0 || currentSnapshot.hasActiveWhitelist,
-                statusText = if (currentSnapshot.hasActiveWhitelist) {
-                    "Whitelist Active (${currentSnapshot.whitelistProfileName ?: "Kiosk"})"
-                } else if (currentSnapshot.blockedPackages.isNotEmpty()) {
-                    "Blacklist Active (${currentSnapshot.blockedPackages.size} rules)"
-                } else {
-                    "Idle (No rules active)"
-                },
-                details = listOf(
-                    "Loaded Blocklist Count" to "$totalLoaded targets",
-                    "Mode" to if (currentSnapshot.hasActiveWhitelist) "Whitelist (Kiosk mode)" else "Blacklist (App blocking)",
-                    "Blocked Domains" to "${currentSnapshot.blockedDomains.size} domains"
-                ),
-                actionText = null,
-                onAction = null
             )
         }
     }
@@ -316,44 +283,54 @@ fun HealthScreen(
 
 @Composable
 private fun HealthSummaryBanner(isAllHealthy: Boolean) {
-    val bgColor = if (isAllHealthy) Color(0xFF132F20) else Color(0xFF332014)
-    val borderColor = if (isAllHealthy) Color(0xFF3DDC97) else Color(0xFFFFB74D)
-    val iconColor = if (isAllHealthy) Color(0xFF3DDC97) else Color(0xFFFFB74D)
-
+    val colors = FocusTheme.colors
     Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = bgColor),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+        shape = FocusShapes.medium,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = BorderStroke(
+            1.dp,
+            if (isAllHealthy) colors.statusActive.copy(alpha = 0.3f) else colors.statusWarning.copy(alpha = 0.3f)
+        ),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(FocusSpacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (isAllHealthy) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isAllHealthy) colors.statusActive.copy(alpha = 0.12f)
+                        else colors.statusWarning.copy(alpha = 0.12f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isAllHealthy) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = if (isAllHealthy) colors.statusActive else colors.statusWarning,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(FocusSpacing.md))
             Column {
                 Text(
-                    text = if (isAllHealthy) "All Core Engines Healthy" else "Attention Required",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
+                    text = if (isAllHealthy) "All engines active" else "Setup required",
+                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (isAllHealthy)
-                        "Foreground detection, WindowManager overlay, and battery survival are verified."
+                        "FocusShield is fully configured and enforcing rules."
                     else
-                        "One or more essential background components are inactive or unexempted.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFCCCCCC)
+                        "One or more required permissions need configuration below.",
+                    style = FocusTypography.caption,
+                    color = colors.textMuted
                 )
             }
         }
@@ -367,95 +344,79 @@ private fun HealthItemCard(
     isHealthy: Boolean,
     statusText: String,
     details: List<Pair<String, String>>,
-    actionText: String?,
-    onAction: (() -> Unit)?
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
-    val statusColor = if (isHealthy) Color(0xFF3DDC97) else Color(0xFFFF5252)
-
+    val colors = FocusTheme.colors
     Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+        shape = FocusShapes.medium,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = BorderStroke(1.dp, colors.border),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(FocusSpacing.md)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(statusColor.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = statusColor,
+                        tint = colors.primary,
                         modifier = Modifier.size(20.dp)
                     )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                    Spacer(modifier = Modifier.width(FocusSpacing.xs))
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                }
+
+                Surface(
+                    shape = FocusShapes.small,
+                    color = if (isHealthy) colors.statusActive.copy(alpha = 0.12f) else colors.statusDestructive.copy(alpha = 0.12f)
+                ) {
                     Text(
                         text = statusText,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = statusColor
+                        color = if (isHealthy) colors.statusActive else colors.statusDestructive,
+                        style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                details.forEach { (label, value) ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                details.forEach { (key, value) ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = key,
+                            style = FocusTypography.caption,
+                            color = colors.textMuted
                         )
                         Text(
                             text = value,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary
                         )
                     }
                 }
             }
 
             if (actionText != null && onAction != null) {
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(
+                Spacer(modifier = Modifier.height(FocusSpacing.md))
+                FocusOutlinedButton(
+                    text = actionText,
                     onClick = onAction,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(actionText)
-                }
+                )
             }
         }
     }

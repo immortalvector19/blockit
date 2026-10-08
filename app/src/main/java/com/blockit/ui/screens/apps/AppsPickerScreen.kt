@@ -1,10 +1,5 @@
 package com.blockit.ui.screens.apps
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,44 +9,37 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.blockit.ui.theme.BlockitTheme
+import com.blockit.ui.components.FocusAppIcon
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusTopBar
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppsPickerScreen(
     viewModel: AppsPickerViewModel,
@@ -59,40 +47,26 @@ fun AppsPickerScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
-    val colors = BlockitTheme.colors
-    val context = LocalContext.current
+    val colors = FocusTheme.colors
 
     Scaffold(
         modifier = modifier,
         containerColor = colors.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Select Apps",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = colors.textPrimary
-                        )
-                    }
-                },
+            FocusTopBar(
+                title = "Select apps",
+                onBackClick = onBackClick,
                 actions = {
                     if (state.selectedPackages.isNotEmpty()) {
                         TextButton(onClick = { viewModel.clearSelection() }) {
-                            Text("Clear", color = colors.primary, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "Clear",
+                                style = FocusTypography.bodyBold,
+                                color = colors.accent
+                            )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.background
-                )
+                }
             )
         },
         bottomBar = {
@@ -101,22 +75,15 @@ fun AppsPickerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(FocusSpacing.lg)
                 ) {
-                    Button(
+                    FocusButton(
+                        text = if (selectedCount == 1) "Add 1 selected app" else "Add $selectedCount selected apps",
                         onClick = {
                             viewModel.saveSelectedApps(onComplete = onBackClick)
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = if (selectedCount == 1) "Add 1 Selected App" else "Add $selectedCount Selected Apps",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
@@ -130,31 +97,64 @@ fun AppsPickerScreen(
             OutlinedTextField(
                 value = state.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
-                placeholder = { Text("Search installed apps", color = colors.textMuted) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.textMuted) },
+                placeholder = {
+                    Text(
+                        text = "Search installed apps",
+                        style = FocusTypography.body,
+                        color = colors.textSecondary
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = "Search",
+                        tint = colors.textSecondary
+                    )
+                },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = FocusShapes.medium,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.accent,
+                    unfocusedBorderColor = colors.divider,
+                    focusedContainerColor = colors.surface,
+                    unfocusedContainerColor = colors.surface,
+                    cursorColor = colors.accent
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.sm)
             )
 
             // Filter Chips & Select All
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FilterChip(
                     selected = state.showSystemApps,
                     onClick = { viewModel.setShowSystemApps(!state.showSystemApps) },
-                    label = { Text("Include System Apps") }
+                    label = {
+                        Text(
+                            text = "Include system apps",
+                            style = FocusTypography.caption
+                        )
+                    },
+                    shape = FocusShapes.small,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colors.accent.copy(alpha = 0.15f),
+                        selectedLabelColor = colors.accent
+                    )
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(FocusSpacing.sm))
                 if (!state.isLoading && state.apps.isNotEmpty()) {
                     TextButton(onClick = { viewModel.selectAllVisible() }) {
-                        Text("Select All (${state.apps.size})", color = colors.primary)
+                        Text(
+                            text = "Select all (${state.apps.size})",
+                            style = FocusTypography.captionBold,
+                            color = colors.accent
+                        )
                     }
                 }
             }
@@ -166,7 +166,7 @@ fun AppsPickerScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = colors.primary)
+                    CircularProgressIndicator(color = colors.accent)
                 }
             } else if (state.apps.isEmpty()) {
                 Box(
@@ -176,8 +176,9 @@ fun AppsPickerScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No apps matching query.",
-                        color = colors.textMuted
+                        text = "No apps found",
+                        style = FocusTypography.body,
+                        color = colors.textSecondary
                     )
                 }
             } else {
@@ -188,62 +189,26 @@ fun AppsPickerScreen(
                 ) {
                     items(state.apps, key = { it.packageName }) { app ->
                         val isSelected = state.selectedPackages.contains(app.packageName)
-                        val iconBitmap = remember(app.packageName) {
-                            try {
-                                val drawable = context.packageManager.getApplicationIcon(app.packageName)
-                                val bitmap = Bitmap.createBitmap(
-                                    drawable.intrinsicWidth.coerceAtLeast(1),
-                                    drawable.intrinsicHeight.coerceAtLeast(1),
-                                    Bitmap.Config.ARGB_8888
-                                )
-                                val canvas = Canvas(bitmap)
-                                drawable.setBounds(0, 0, canvas.width, canvas.height)
-                                drawable.draw(canvas)
-                                bitmap.asImageBitmap()
-                            } catch (_: Exception) {
-                                null
-                            }
-                        }
 
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { viewModel.toggleAppSelection(app.packageName) }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .padding(horizontal = FocusSpacing.lg, vertical = FocusSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // App Icon
-                            if (iconBitmap != null) {
-                                Image(
-                                    bitmap = iconBitmap,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(colors.surfaceVariant),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = app.appName.take(1).uppercase(),
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.textPrimary
-                                    )
-                                }
-                            }
+                            FocusAppIcon(
+                                packageName = app.packageName,
+                                appName = app.appName,
+                                size = 40.dp
+                            )
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(FocusSpacing.md))
 
-                            // App Label (+ package name only during search)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = app.appName,
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                                    style = FocusTypography.bodyBold,
                                     color = colors.textPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -252,8 +217,8 @@ fun AppsPickerScreen(
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = app.packageName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = colors.textMuted,
+                                        style = FocusTypography.caption,
+                                        color = colors.textSecondary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -262,7 +227,12 @@ fun AppsPickerScreen(
 
                             Checkbox(
                                 checked = isSelected,
-                                onCheckedChange = { viewModel.toggleAppSelection(app.packageName) }
+                                onCheckedChange = { viewModel.toggleAppSelection(app.packageName) },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = colors.accent,
+                                    uncheckedColor = colors.textSecondary,
+                                    checkmarkColor = colors.onAccent
+                                )
                             )
                         }
                     }

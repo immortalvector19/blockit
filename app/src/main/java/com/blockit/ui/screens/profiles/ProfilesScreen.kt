@@ -1,10 +1,8 @@
 package com.blockit.ui.screens.profiles
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,37 +19,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,17 +57,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.blockit.ui.components.formatDaysSummary
+import com.blockit.ui.components.formatMinuteOfDayAmPm
+import com.blockit.ui.components.formatNextScheduleRun
 import com.blockit.domain.model.BlockMode
 import com.blockit.domain.model.FocusSession
+import com.blockit.domain.model.ListType
 import com.blockit.domain.model.Profile
+import com.blockit.domain.model.ProfileType
+import com.blockit.ui.components.CreateProfileDialog
+import com.blockit.ui.components.FocusAlertDialog
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusDestructiveButton
+import com.blockit.ui.components.FocusEmptyState
+import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.components.FocusSectionHeader
+import com.blockit.ui.components.FocusTopBar
 import com.blockit.ui.screens.strictmode.StrictModeChallengeDialog
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfilesScreen(
     viewModel: ProfilesViewModel,
@@ -87,11 +93,12 @@ fun ProfilesScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val colors = FocusTheme.colors
     val profiles by viewModel.profiles.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
     val strictConfig by viewModel.strictModeConfig.collectAsState()
 
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
 
     // Strict Mode friction interception state
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -124,59 +131,39 @@ fun ProfilesScreen(
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.fillMaxSize(),
+        containerColor = colors.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("BlockIt")
-                    }
-                },
+            FocusTopBar(
+                title = "Profiles",
+                showLogo = true,
                 actions = {
                     IconButton(onClick = onOpenInsightsClick) {
                         Icon(
-                            imageVector = Icons.Default.BarChart,
-                            contentDescription = "Usage Insights"
+                            imageVector = Icons.Rounded.BarChart,
+                            contentDescription = "Stats",
+                            tint = colors.textPrimary
                         )
                     }
                     IconButton(onClick = onOpenSettingsClick) {
                         Icon(
-                            imageVector = if (strictConfig.isEnabled) Icons.Default.Lock else Icons.Default.Settings,
-                            contentDescription = "Strict Mode & Settings",
-                            tint = if (strictConfig.isEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            imageVector = if (strictConfig.isEnabled) Icons.Rounded.Lock else Icons.Rounded.Settings,
+                            contentDescription = "Settings",
+                            tint = if (strictConfig.isEnabled) colors.statusDestructive else colors.textPrimary
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Profile")
-            }
         }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(FocusSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)
         ) {
-            // Live Protection Status Banner
+            // Live Status Card
             item {
                 ProtectionStatusCard(
                     isAccessibilityEnabled = isAccessibilityEnabled,
@@ -215,26 +202,31 @@ fun ProfilesScreen(
 
             if (profiles.isEmpty()) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No focus profiles yet.\nTap '+' to create one.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
+                    FocusEmptyState(
+                        title = "No focus profiles yet",
+                        message = "Create a profile to start blocking distractions.",
+                        icon = Icons.Rounded.Layers,
+                        actionButton = {
+                            FocusButton(
+                                text = "Create profile",
+                                leadingIcon = Icons.Rounded.Add,
+                                onClick = { showCreateDialog = true }
+                            )
+                        }
+                    )
                 }
             } else {
                 item {
-                    Text(
-                        text = "Profiles",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp)
+                    FocusSectionHeader(
+                        title = "Profiles",
+                        subtitle = "Select a profile to configure rules",
+                        action = {
+                            FocusOutlinedButton(
+                                text = "Add",
+                                leadingIcon = Icons.Rounded.Add,
+                                onClick = { showCreateDialog = true }
+                            )
+                        }
                     )
                 }
 
@@ -266,8 +258,15 @@ fun ProfilesScreen(
         if (showCreateDialog) {
             CreateProfileDialog(
                 onDismiss = { showCreateDialog = false },
-                onConfirm = { name, mode ->
-                    viewModel.createProfile(name = name, blockMode = mode)
+                onConfirm = { name, profileType, listType, daysMask, startMinute, endMinute ->
+                    viewModel.createProfile(
+                        name = name,
+                        profileType = profileType,
+                        listType = listType,
+                        daysMask = daysMask,
+                        startMinute = startMinute,
+                        endMinute = endMinute
+                    )
                     showCreateDialog = false
                 }
             )
@@ -296,89 +295,88 @@ private fun ProtectionStatusCard(
     onEnableAccessibility: () -> Unit,
     onEnableOverlay: () -> Unit
 ) {
+    val colors = FocusTheme.colors
     if (!isAccessibilityEnabled || !isOverlayEnabled) {
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2E151B)),
-            border = BorderStroke(1.dp, Color(0xFFDC2626)),
-            shape = RoundedCornerShape(14.dp)
+            color = colors.statusWarning.copy(alpha = 0.1f),
+            border = BorderStroke(1.dp, colors.statusWarning),
+            shape = FocusShapes.medium
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(FocusSpacing.md)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Warning,
+                        imageVector = Icons.Rounded.Warning,
                         contentDescription = null,
-                        tint = Color(0xFFF87171),
-                        modifier = Modifier.size(24.dp)
+                        tint = colors.statusWarning,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.xs))
                     Text(
-                        text = "Protection Inactive",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFFFEF2F2)
+                        text = "Needs setup",
+                        style = FocusTypography.title,
+                        color = colors.textPrimary
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.xs))
                 Text(
                     text = if (!isAccessibilityEnabled && !isOverlayEnabled)
-                        "Accessibility Service and Display Over Other Apps permissions are required to detect foreground distractions and show the block screen."
+                        "Accessibility service and overlay permission are required to block apps."
                     else if (!isAccessibilityEnabled)
-                        "Accessibility Service is disabled. BlockIt cannot detect foreground apps or enforce whitelist/blacklist modes without it."
+                        "Accessibility service is required to detect open apps."
                     else
-                        "Display Over Other Apps permission is required to draw the block overlay on top of distractions.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFFCA5A5)
+                        "Display over other apps is required to show the block screen.",
+                    style = FocusTypography.caption,
+                    color = colors.textSecondary
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
+                FocusButton(
+                    text = if (!isAccessibilityEnabled) "Enable accessibility" else "Enable overlay",
                     onClick = {
                         if (!isAccessibilityEnabled) onEnableAccessibility() else onEnableOverlay()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (!isAccessibilityEnabled) "Activate Accessibility Service" else "Grant Overlay Permission")
-                }
+                )
             }
         }
     } else {
         val anyWhitelistActive = profiles.any { it.isEnabled && it.blockMode == BlockMode.WHITELIST }
         val anyBlacklistActive = profiles.any { it.isEnabled && it.blockMode == BlockMode.BLACKLIST }
 
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0D281E)),
-            border = BorderStroke(1.dp, Color(0xFF10B981)),
-            shape = RoundedCornerShape(14.dp)
+            color = colors.surface,
+            border = BorderStroke(1.dp, colors.border),
+            shape = FocusShapes.medium
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
+                    .padding(FocusSpacing.md),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.CheckCircle,
+                    imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = null,
-                    tint = Color(0xFF34D399),
-                    modifier = Modifier.size(26.dp)
+                    tint = colors.statusActive,
+                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(FocusSpacing.sm))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Protection Active & Guarding",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFFECFDF5)
+                        text = "Protection ready",
+                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.textPrimary
                     )
                     Text(
                         text = when {
-                            anyWhitelistActive -> "Whitelist Kiosk Active - Home screen locked to permitted apps"
-                            activeSession != null -> "Quick Focus Session Active"
-                            anyBlacklistActive -> "Blacklist Guard Active (${profiles.count { it.isEnabled }} profiles active)"
-                            else -> "Standby - Enable a profile or start a quick session"
+                            anyWhitelistActive -> "Allowlist kiosk active"
+                            activeSession != null -> "Focus session active"
+                            anyBlacklistActive -> "Blocklist guarding (${profiles.count { it.isEnabled }} active)"
+                            else -> "Standby • Choose a profile to start"
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFA7F3D0)
+                        style = FocusTypography.caption,
+                        color = colors.textSecondary
                     )
                 }
             }
@@ -393,15 +391,15 @@ private fun QuickFocusSessionCard(
     onStartSession: (Long, Int) -> Unit,
     onEndSession: (Long) -> Unit
 ) {
-    Card(
+    val colors = FocusTheme.colors
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (activeSession != null) Color(0xFF1E293B) else MaterialTheme.colorScheme.surfaceVariant
-        )
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.border),
+        shape = FocusShapes.medium
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(FocusSpacing.md)) {
             if (activeSession != null) {
-                // Active Countdown View
                 var remainingMs by remember(activeSession.endTimestamp) {
                     mutableLongStateOf((activeSession.endTimestamp - System.currentTimeMillis()).coerceAtLeast(0))
                 }
@@ -421,74 +419,66 @@ private fun QuickFocusSessionCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.HourglassTop,
+                        imageVector = Icons.Rounded.HourglassTop,
                         contentDescription = null,
-                        tint = Color(0xFF818CF8)
+                        tint = colors.accent
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.sm))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Focus Session Active",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFFF1F5F9)
+                            text = "Focus session active",
+                            style = FocusTypography.title,
+                            color = colors.textPrimary
                         )
                         Text(
                             text = String.format("%02d:%02d remaining", mins, secs),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF94A3B8)
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary
                         )
                     }
-                    Button(
-                        onClick = { onEndSession(activeSession.id) },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("End")
-                    }
+                    FocusDestructiveButton(
+                        text = "End",
+                        onClick = { onEndSession(activeSession.id) }
+                    )
                 }
             } else {
-                // Inactive Session Starter View
                 Text(
-                    text = "Quick Focus Session",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "Quick focus",
+                    style = FocusTypography.title,
+                    color = colors.textPrimary
                 )
                 Text(
-                    text = "Block all distracting apps immediately:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    text = "Start a timer with the active profile:",
+                    style = FocusTypography.caption,
+                    color = colors.textSecondary
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
                 val targetProfileId = profiles.firstOrNull()?.id ?: 1L
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
                 ) {
                     listOf(15, 25, 45, 60).forEach { mins ->
                         Surface(
                             onClick = { onStartSession(targetProfileId, mins) },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF1E293B),
-                            border = BorderStroke(1.dp, Color(0xFF334155))
+                            shape = FocusShapes.small,
+                            color = colors.surfaceVariant
                         ) {
                             Column(
-                                modifier = Modifier.padding(vertical = 10.dp),
+                                modifier = Modifier.padding(vertical = FocusSpacing.sm),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
                                     text = "$mins",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    ),
-                                    color = Color(0xFF818CF8)
+                                    style = FocusTypography.title,
+                                    color = colors.textPrimary
                                 )
                                 Text(
                                     text = "min",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF94A3B8)
+                                    style = FocusTypography.caption,
+                                    color = colors.textSecondary
                                 )
                             }
                         }
@@ -506,164 +496,122 @@ private fun ProfileCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    val colors = FocusTheme.colors
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(14.dp)
+        shape = FocusShapes.medium,
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.border)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(FocusSpacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = profile.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.textPrimary,
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.xs))
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (profile.blockMode == BlockMode.WHITELIST) Color(0xFF4338CA).copy(alpha = 0.35f) else Color(0xFF0369A1).copy(alpha = 0.35f)
+                        shape = FocusShapes.small,
+                        color = colors.surfaceVariant
                     ) {
                         Text(
-                            text = if (profile.blockMode == BlockMode.WHITELIST) "Whitelist" else "Blacklist",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (profile.blockMode == BlockMode.WHITELIST) Color(0xFF818CF8) else Color(0xFF38BDF8),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = if (profile.profileType == ProfileType.SCHEDULE) "Schedule" else "Focus",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        shape = FocusShapes.small,
+                        color = colors.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST) "Allowlist" else "Blocklist",
+                            style = FocusTypography.caption,
+                            color = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST) colors.accent else colors.textSecondary,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = FocusSpacing.xs, vertical = 2.dp)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (profile.blockMode == BlockMode.WHITELIST)
-                        "${profile.appCount} allowed apps"
+                    text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST)
+                        "${profile.appCount} permitted apps"
                     else
-                        "${profile.appCount} apps, ${profile.domainCount} websites",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        "${profile.appCount} apps • ${profile.domainCount} websites",
+                    style = FocusTypography.caption,
+                    color = colors.textSecondary
                 )
+                if (profile.profileType == ProfileType.SCHEDULE) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "${formatDaysSummary(profile.scheduleDaysMask)} • ${formatMinuteOfDayAmPm(profile.scheduleStartMinute)}–${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}",
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        text = "Next: ${formatNextScheduleRun(profile.scheduleDaysMask, profile.scheduleStartMinute)}",
+                        style = FocusTypography.caption,
+                        color = colors.accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             IconButton(onClick = onDelete) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
+                    imageVector = Icons.Rounded.Delete,
                     contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(FocusSpacing.xs))
 
             Switch(
                 checked = profile.isEnabled,
-                onCheckedChange = onToggle
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = colors.accent,
+                    uncheckedThumbColor = colors.textTertiary,
+                    uncheckedTrackColor = colors.surfaceVariant,
+                    uncheckedBorderColor = colors.border
+                )
             )
         }
     }
 }
 
-@Composable
-private fun CreateProfileDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, BlockMode) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var selectedMode by remember { mutableStateOf(BlockMode.BLACKLIST) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New Focus Profile") },
-        text = {
-            Column {
-                Text(
-                    "Choose a profile type and name:",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Profile Name") },
-                    placeholder = { Text(if (selectedMode == BlockMode.BLACKLIST) "e.g. Social Media Lock" else "e.g. Study Kiosk") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Mode:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        onClick = { selectedMode = BlockMode.BLACKLIST },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (selectedMode == BlockMode.BLACKLIST) Color(0xFF0369A1).copy(alpha = 0.35f) else Color(0xFF1E293B),
-                        border = BorderStroke(1.dp, if (selectedMode == BlockMode.BLACKLIST) Color(0xFF38BDF8) else Color(0xFF334155))
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text(
-                                "Blacklist",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (selectedMode == BlockMode.BLACKLIST) Color(0xFF38BDF8) else Color(0xFFF1F5F9)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                "Block specific apps & sites",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
-                    }
-                    Surface(
-                        onClick = { selectedMode = BlockMode.WHITELIST },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (selectedMode == BlockMode.WHITELIST) Color(0xFF4338CA).copy(alpha = 0.35f) else Color(0xFF1E293B),
-                        border = BorderStroke(1.dp, if (selectedMode == BlockMode.WHITELIST) Color(0xFF818CF8) else Color(0xFF334155))
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text(
-                                "Whitelist",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (selectedMode == BlockMode.WHITELIST) Color(0xFF818CF8) else Color(0xFFF1F5F9)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                "Lock down phone to allowed apps",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (name.isNotBlank()) onConfirm(name.trim(), selectedMode) },
-                enabled = name.isNotBlank()
-            ) {
-                Text("Create")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}

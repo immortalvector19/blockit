@@ -3,6 +3,7 @@ package com.blockit.ui.screens.backup
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,32 +15,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,10 +38,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.blockit.ui.components.FocusAlertDialog
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.components.FocusTopBar
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupRestoreScreen(
     viewModel: BackupViewModel,
@@ -63,6 +57,7 @@ fun BackupRestoreScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val colors = FocusTheme.colors
 
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -87,21 +82,12 @@ fun BackupRestoreScreen(
 
     Scaffold(
         modifier = modifier,
+        containerColor = colors.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Backup & Restore") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+            FocusTopBar(
+                title = "Backup and restore",
+                onBackClick = onBackClick
             )
         }
     ) { padding ->
@@ -110,152 +96,129 @@ fun BackupRestoreScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(FocusSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(FocusSpacing.lg)
         ) {
-            // Explanatory card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                shape = RoundedCornerShape(14.dp)
+            // Local file storage info card
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, colors.divider, FocusShapes.medium),
+                shape = FocusShapes.medium,
+                color = colors.surface
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(FocusSpacing.md),
                     verticalAlignment = Alignment.Top
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Storage,
+                        imageVector = Icons.Rounded.Storage,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
+                        tint = colors.accent,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(FocusSpacing.md))
                     Column {
                         Text(
-                            text = "Local File Storage",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "Local storage files",
+                            style = FocusTypography.bodyBold,
+                            color = colors.textPrimary
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(FocusSpacing.xs))
                         Text(
-                            text = "Backups are exported directly as standard JSON files to your device storage.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                            text = "Backups are exported directly as standard JSON files to your device storage. They never leave your phone.",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary
                         )
                     }
                 }
             }
 
             // Export Section Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(14.dp)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, colors.divider, FocusShapes.medium),
+                shape = FocusShapes.medium,
+                color = colors.surface
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(FocusSpacing.md)) {
                     Text(
-                        text = "Export Settings",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "Export settings",
+                        style = FocusTypography.bodyBold,
+                        color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.xs))
                     Text(
-                        text = "Saves all blocking profiles, target app packages, website domains, recurring schedules, and strict mode preferences into a single JSON file.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Saves all blocking profiles, targeted app packages, website domains, recurring routines, and strict mode preferences into a JSON file.",
+                        style = FocusTypography.caption,
+                        color = colors.textSecondary
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.md))
 
-                    Button(
+                    FocusButton(
+                        text = if (uiState.isExporting) "Exporting..." else "Export to JSON file",
+                        leadingIcon = if (!uiState.isExporting) Icons.Rounded.FileDownload else null,
                         onClick = {
-                            val defaultFileName = "blockit_backup_${System.currentTimeMillis() / 1000}.json"
+                            val defaultFileName = "focusshield_backup_${System.currentTimeMillis() / 1000}.json"
                             exportLauncher.launch(defaultFileName)
                         },
                         enabled = !uiState.isExporting && !uiState.isImporting,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (uiState.isExporting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Exporting...")
-                        } else {
-                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Export to Local JSON")
-                        }
-                    }
+                    )
                 }
             }
 
-            // Import Section Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(14.dp)
+            // Restore Section Card
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, colors.divider, FocusShapes.medium),
+                shape = FocusShapes.medium,
+                color = colors.surface
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(FocusSpacing.md)) {
                     Text(
-                        text = "Restore Settings",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "Restore settings",
+                        style = FocusTypography.bodyBold,
+                        color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.xs))
                     Text(
-                        text = "Load a previously exported BlockIt JSON backup. This transaction replaces existing profiles with the backup contents and restores schedule alarms.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Load a previously exported FocusShield JSON backup. This replaces existing profiles with the backup contents and re-arms schedule alarms.",
+                        style = FocusTypography.caption,
+                        color = colors.textSecondary
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(FocusSpacing.md))
 
-                    OutlinedButton(
+                    FocusOutlinedButton(
+                        text = if (uiState.isImporting) "Restoring..." else "Restore from JSON file",
+                        leadingIcon = if (!uiState.isImporting) Icons.Rounded.FileUpload else null,
                         onClick = {
                             importLauncher.launch(arrayOf("application/json", "text/*"))
                         },
                         enabled = !uiState.isExporting && !uiState.isImporting,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (uiState.isImporting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Restoring...")
-                        } else {
-                            Icon(imageVector = Icons.Default.FileUpload, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Restore from JSON File")
-                        }
-                    }
+                    )
                 }
             }
 
-            // Info Notice
+            // Privacy note
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp),
+                modifier = Modifier.padding(horizontal = FocusSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Info,
+                    imageVector = Icons.Rounded.Info,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(18.dp)
+                    tint = colors.textMuted,
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(FocusSpacing.sm))
                 Text(
                     text = "Usage statistics are kept strictly in local logs and are not included in rule exports.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    style = FocusTypography.caption,
+                    color = colors.textSecondary
                 )
             }
         }
@@ -263,31 +226,18 @@ fun BackupRestoreScreen(
 
     // Confirmation dialog before restore
     if (pendingRestoreUri != null) {
-        AlertDialog(
-            onDismissRequest = { pendingRestoreUri = null },
-            title = { Text("Restore Backup?") },
-            text = {
-                Text("Restoring will replace all current profiles, blocked apps, domains, and schedules with the data in the selected backup. This cannot be undone.")
+        FocusAlertDialog(
+            title = "Restore backup?",
+            text = "Restoring will replace all current profiles, blocked apps, domains, and schedules with the data in the selected backup. This cannot be undone.",
+            confirmText = "Overwrite and restore",
+            dismissText = "Cancel",
+            isDestructive = true,
+            onConfirm = {
+                val uri = pendingRestoreUri!!
+                pendingRestoreUri = null
+                viewModel.importBackup(uri, context.contentResolver)
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val uri = pendingRestoreUri!!
-                        pendingRestoreUri = null
-                        viewModel.importBackup(uri, context.contentResolver)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Overwrite & Restore")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingRestoreUri = null }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { pendingRestoreUri = null }
         )
     }
 }

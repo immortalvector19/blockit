@@ -28,6 +28,19 @@ class FocusHomeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val container = BlockItApplication.from(this)
 
+        // Fullscreen edge-to-edge and lockscreen coverage
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+
         // Trapped back press callback
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -37,7 +50,7 @@ class FocusHomeActivity : ComponentActivity() {
 
         setContent {
             val themeMode by container.preferenceManager.themeMode.collectAsState(initial = ThemeMode.LIGHT)
-            val accentTheme by container.preferenceManager.accentTheme.collectAsState(initial = AccentTheme.ORANGE)
+            val accentTheme by container.preferenceManager.accentTheme.collectAsState(initial = AccentTheme.DEFAULT)
 
             val isSystemDark = isSystemInDarkTheme()
             val isDark = when (themeMode) {
@@ -47,7 +60,7 @@ class FocusHomeActivity : ComponentActivity() {
             }
 
             SideEffect {
-                val windowBg = if (isDark) "#191817" else "#ECEBE6"
+                val windowBg = if (isDark) "#121316" else "#F8F9FA"
                 window.decorView.setBackgroundColor(Color.parseColor(windowBg))
             }
 

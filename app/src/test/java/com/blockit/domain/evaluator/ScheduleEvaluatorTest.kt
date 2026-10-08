@@ -73,4 +73,39 @@ class ScheduleEvaluatorTest {
 
         assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 500))
     }
+
+    @Test
+    fun eveningSchedule_730PM_retentionAndEvaluation() {
+        // User sets 7:30 PM (19:30 -> 19 * 60 + 30 = 1170 minutes)
+        val hour12 = 7
+        val minute = 30
+        val isPm = true
+        val minuteOfDay = com.blockit.ui.components.toMinuteOfDay(hour12, minute, isPm)
+        org.junit.Assert.assertEquals(1170, minuteOfDay)
+
+        // Reopening / reading state from minuteOfDay must faithfully reproduce 7:30 PM
+        val (reopenedHour12, reopenedMin, reopenedIsPm) = com.blockit.ui.components.fromMinuteOfDay(minuteOfDay)
+        org.junit.Assert.assertEquals(7, reopenedHour12)
+        org.junit.Assert.assertEquals(30, reopenedMin)
+        org.junit.Assert.assertTrue(reopenedIsPm)
+
+        val schedule = Schedule(
+            profileId = 42,
+            daysOfWeekMask = 127, // Daily
+            startMinuteOfDay = 1170, // 7:30 PM
+            endMinuteOfDay = 1320,  // 10:00 PM
+            isEnabled = true
+        )
+
+        // 7:29 PM (1169) -> Not active
+        assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1169))
+        // 7:30 PM (1170) -> Active
+        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1170))
+        // 8:45 PM (1245) -> Active
+        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1245))
+        // 10:00 PM (1320) -> Active
+        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1320))
+        // 10:01 PM (1321) -> Not active
+        assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1321))
+    }
 }

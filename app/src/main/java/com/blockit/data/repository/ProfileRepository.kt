@@ -26,13 +26,20 @@ class ProfileRepository(
     fun observeAllProfiles(): Flow<List<Profile>> {
         return profileDao.observeAllProfiles().map { list ->
             list.map { item ->
+                val pType = if (item.profileType == "SCHEDULE") com.blockit.domain.model.ProfileType.SCHEDULE else com.blockit.domain.model.ProfileType.FOCUS
+                val lType = if (item.listType == "ALLOWLIST" || item.blockMode == "WHITELIST") com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
                 Profile(
                     id = item.id,
                     name = item.name,
                     colorHex = item.colorHex,
                     iconKey = item.iconKey,
                     isEnabled = item.isEnabled,
-                    blockMode = if (item.blockMode == "WHITELIST") com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
+                    profileType = pType,
+                    listType = lType,
+                    scheduleDaysMask = item.scheduleDaysMask,
+                    scheduleStartMinute = item.scheduleStartMinute,
+                    scheduleEndMinute = item.scheduleEndMinute,
+                    blockMode = if (lType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
                     createdAt = item.createdAt,
                     appCount = item.appCount,
                     domainCount = item.domainCount
@@ -43,26 +50,40 @@ class ProfileRepository(
 
     suspend fun getProfileById(profileId: Long): Profile? {
         val entity = profileDao.getProfileById(profileId) ?: return null
+        val pType = if (entity.profileType == "SCHEDULE") com.blockit.domain.model.ProfileType.SCHEDULE else com.blockit.domain.model.ProfileType.FOCUS
+        val lType = if (entity.listType == "ALLOWLIST" || entity.blockMode == "WHITELIST") com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
         return Profile(
             id = entity.id,
             name = entity.name,
             colorHex = entity.colorHex,
             iconKey = entity.iconKey,
             isEnabled = entity.isEnabled,
-            blockMode = if (entity.blockMode == "WHITELIST") com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
+            profileType = pType,
+            listType = lType,
+            scheduleDaysMask = entity.scheduleDaysMask,
+            scheduleStartMinute = entity.scheduleStartMinute,
+            scheduleEndMinute = entity.scheduleEndMinute,
+            blockMode = if (lType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
             createdAt = entity.createdAt
         )
     }
 
     suspend fun getAllProfiles(): List<Profile> {
         return profileDao.getEnabledProfiles().map { entity ->
+            val pType = if (entity.profileType == "SCHEDULE") com.blockit.domain.model.ProfileType.SCHEDULE else com.blockit.domain.model.ProfileType.FOCUS
+            val lType = if (entity.listType == "ALLOWLIST" || entity.blockMode == "WHITELIST") com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
             Profile(
                 id = entity.id,
                 name = entity.name,
                 colorHex = entity.colorHex,
                 iconKey = entity.iconKey,
                 isEnabled = entity.isEnabled,
-                blockMode = if (entity.blockMode == "WHITELIST") com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
+                profileType = pType,
+                listType = lType,
+                scheduleDaysMask = entity.scheduleDaysMask,
+                scheduleStartMinute = entity.scheduleStartMinute,
+                scheduleEndMinute = entity.scheduleEndMinute,
+                blockMode = if (lType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
                 createdAt = entity.createdAt
             )
         }
@@ -70,16 +91,27 @@ class ProfileRepository(
 
     suspend fun createProfile(
         name: String,
-        colorHex: Long = 0xFFFF5520,
+        colorHex: Long = 0xFF2563EB,
         iconKey: String = "focus",
-        blockMode: com.blockit.domain.model.BlockMode = com.blockit.domain.model.BlockMode.BLACKLIST
+        profileType: com.blockit.domain.model.ProfileType = com.blockit.domain.model.ProfileType.FOCUS,
+        listType: com.blockit.domain.model.ListType = com.blockit.domain.model.ListType.BLOCKLIST,
+        daysMask: Int = 127,
+        startMinute: Int = 540,
+        endMinute: Int = 1020,
+        blockMode: com.blockit.domain.model.BlockMode = if (listType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST
     ): Long {
+        val effectiveListType = if (blockMode == com.blockit.domain.model.BlockMode.WHITELIST) com.blockit.domain.model.ListType.ALLOWLIST else listType
         val entity = ProfileEntity(
             name = name.trim(),
             colorHex = colorHex,
             iconKey = iconKey,
             isEnabled = true,
-            blockMode = blockMode.name,
+            blockMode = if (effectiveListType == com.blockit.domain.model.ListType.ALLOWLIST) "WHITELIST" else "BLACKLIST",
+            profileType = profileType.name,
+            listType = effectiveListType.name,
+            scheduleDaysMask = daysMask,
+            scheduleStartMinute = startMinute,
+            scheduleEndMinute = endMinute,
             createdAt = System.currentTimeMillis()
         )
         return profileDao.insertProfile(entity)
@@ -93,10 +125,19 @@ class ProfileRepository(
                 colorHex = profile.colorHex,
                 iconKey = profile.iconKey,
                 isEnabled = profile.isEnabled,
-                blockMode = profile.blockMode.name,
+                blockMode = if (profile.listType == com.blockit.domain.model.ListType.ALLOWLIST) "WHITELIST" else "BLACKLIST",
+                profileType = profile.profileType.name,
+                listType = profile.listType.name,
+                scheduleDaysMask = profile.scheduleDaysMask,
+                scheduleStartMinute = profile.scheduleStartMinute,
+                scheduleEndMinute = profile.scheduleEndMinute,
                 createdAt = profile.createdAt
             )
         )
+    }
+
+    suspend fun updateProfileSchedule(profileId: Long, daysMask: Int, startMin: Int, endMin: Int) {
+        profileDao.updateProfileSchedule(profileId, daysMask, startMin, endMin)
     }
 
     suspend fun deleteProfile(profileId: Long) {
@@ -109,7 +150,8 @@ class ProfileRepository(
     }
 
     suspend fun setProfileMode(profileId: Long, blockMode: com.blockit.domain.model.BlockMode) {
-        profileDao.setProfileMode(profileId, blockMode.name)
+        val listType = if (blockMode == com.blockit.domain.model.BlockMode.WHITELIST) "ALLOWLIST" else "BLOCKLIST"
+        profileDao.setProfileMode(profileId, blockMode.name, listType)
     }
 
     suspend fun duplicateProfile(profileId: Long): Long {
@@ -141,25 +183,42 @@ class ProfileRepository(
     suspend fun createTemplateProfile(templateType: String): Long {
         return when (templateType.uppercase()) {
             "WORK" -> {
-                createProfile(
+                val id = createProfile(
                     name = "Work Hours",
                     colorHex = 0xFF2563EB,
                     iconKey = "work",
                     blockMode = com.blockit.domain.model.BlockMode.BLACKLIST
                 )
+                addDomainToProfile(id, "instagram.com", false)
+                addDomainToProfile(id, "tiktok.com", false)
+                addDomainToProfile(id, "twitter.com", false)
+                addDomainToProfile(id, "reddit.com", false)
+                id
             }
             "SLEEP" -> {
-                createProfile(
+                val id = createProfile(
                     name = "Sleep & Rest",
                     colorHex = 0xFF7C3AED,
                     iconKey = "night",
                     blockMode = com.blockit.domain.model.BlockMode.BLACKLIST
                 )
+                addDomainToProfile(id, "youtube.com", false)
+                addDomainToProfile(id, "netflix.com", false)
+                addDomainToProfile(id, "twitch.tv", false)
+                id
+            }
+            "STUDY", "DEEP_STUDY", "FOCUS" -> {
+                createProfile(
+                    name = "Deep Study",
+                    colorHex = 0xFF2563EB,
+                    iconKey = "focus",
+                    blockMode = com.blockit.domain.model.BlockMode.WHITELIST
+                )
             }
             else -> {
                 createProfile(
                     name = "Deep Focus",
-                    colorHex = 0xFFFF5520,
+                    colorHex = 0xFF2563EB,
                     iconKey = "focus",
                     blockMode = com.blockit.domain.model.BlockMode.BLACKLIST
                 )
@@ -167,9 +226,35 @@ class ProfileRepository(
         }
     }
 
+    fun observeAllBlockedApps(): Flow<List<BlockedApp>> {
+        return blockedAppDao.observeAllBlockedApps().map { entities ->
+            entities.map { BlockedApp(it.id, it.profileId, it.packageName, it.appName) }
+        }
+    }
+
     fun observeAppsForProfile(profileId: Long): Flow<List<BlockedApp>> {
         return blockedAppDao.observeAppsForProfile(profileId).map { entities ->
             entities.map { BlockedApp(it.id, it.profileId, it.packageName, it.appName) }
+        }
+    }
+
+    suspend fun getAppsForProfile(profileId: Long): List<BlockedApp> {
+        return blockedAppDao.getAppsForProfile(profileId).map {
+            BlockedApp(it.id, it.profileId, it.packageName, it.appName)
+        }
+    }
+
+    suspend fun syncAppsForProfile(profileId: Long, apps: List<InstalledAppInfo>) {
+        blockedAppDao.deleteAppsForProfile(profileId)
+        if (apps.isNotEmpty()) {
+            val entities = apps.map {
+                BlockedAppEntity(
+                    profileId = profileId,
+                    packageName = it.packageName,
+                    appName = it.appName
+                )
+            }
+            blockedAppDao.insertApps(entities)
         }
     }
 
@@ -208,6 +293,21 @@ class ProfileRepository(
         blockedDomainDao.deleteDomain(
             BlockedDomainEntity(id = domainId, profileId = 0, pattern = "", isWildcard = false)
         )
+    }
+
+    fun observeAllSchedules(): Flow<List<Schedule>> {
+        return scheduleDao.observeAllSchedules().map { entities ->
+            entities.map {
+                Schedule(
+                    id = it.id,
+                    profileId = it.profileId,
+                    daysOfWeekMask = it.daysOfWeekMask,
+                    startMinuteOfDay = it.startMinuteOfDay,
+                    endMinuteOfDay = it.endMinuteOfDay,
+                    isEnabled = it.isEnabled
+                )
+            }
+        }
     }
 
     fun observeSchedulesForProfile(profileId: Long): Flow<List<Schedule>> {

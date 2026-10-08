@@ -59,4 +59,29 @@ class ScheduleTimeFormatterTest {
         // Same minute is not overnight
         assertFalse(isOvernightWindow(startMinute = 540, endMinute = 540))
     }
+
+    @Test
+    fun testFormatNextScheduleRun() {
+        val testCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.MONDAY)
+            set(java.util.Calendar.HOUR_OF_DAY, 14) // 2:00 PM (840)
+            set(java.util.Calendar.MINUTE, 0)
+        }
+
+        // Today later: 7:30 PM (1170) on Monday with Mon active (bit 0 = 1)
+        val todayLater = com.blockit.ui.components.formatNextScheduleRun(mask = 1, startMinute = 1170, currentCal = testCal)
+        assertEquals("Today, 7:30 PM", todayLater)
+
+        // Today earlier (9:00 AM, 540) on Monday with Tue active (bit 1 = 2)
+        val tomorrowRun = com.blockit.ui.components.formatNextScheduleRun(mask = 3, startMinute = 540, currentCal = testCal)
+        assertEquals("Tomorrow, 9:00 AM", tomorrowRun)
+
+        // Only Wednesday active (bit 2 = 4)
+        val wedRun = com.blockit.ui.components.formatNextScheduleRun(mask = 4, startMinute = 600, currentCal = testCal)
+        assertEquals("Wed, 10:00 AM", wedRun)
+
+        // Empty mask
+        val emptyRun = com.blockit.ui.components.formatNextScheduleRun(mask = 0, startMinute = 600, currentCal = testCal)
+        assertEquals("No active days", emptyRun)
+    }
 }

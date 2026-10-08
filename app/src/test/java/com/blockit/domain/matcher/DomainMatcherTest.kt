@@ -13,6 +13,8 @@ class DomainMatcherTest {
         assertEquals("instagram.com", DomainMatcher.extractCleanHost("http://instagram.com:8080/explore"))
         assertEquals("reddit.com", DomainMatcher.extractCleanHost("reddit.com."))
         assertEquals("facebook.com", DomainMatcher.extractCleanHost("  HTTPS://FACEBOOK.COM/user/login  "))
+        assertEquals("facebook.com", DomainMatcher.extractCleanHost("https://www.facebook.com/user/login"))
+        assertEquals("youtube.com", DomainMatcher.extractCleanHost("www.youtube.com/watch?v=123"))
         assertEquals("tiktok.com", DomainMatcher.extractCleanHost("tiktok.com/tag/viral?sort=new"))
     }
 

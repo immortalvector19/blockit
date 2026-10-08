@@ -1,7 +1,7 @@
 package com.blockit.ui.screens.onboarding
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,30 +9,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
@@ -49,13 +41,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.blockit.ui.theme.BlockitTheme
+import com.blockit.ui.components.FocusButton
+import com.blockit.ui.components.FocusMonolithMark
+import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.theme.FocusShapes
+import com.blockit.ui.theme.FocusSpacing
+import com.blockit.ui.theme.FocusTheme
+import com.blockit.ui.theme.FocusTypography
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +71,7 @@ fun OnboardingChecklistSheet(
     canDismiss: Boolean = true,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
     var showPinDialog by remember { mutableStateOf(false) }
 
     val requiredCount = 3
@@ -93,14 +90,14 @@ fun OnboardingChecklistSheet(
         sheetState = sheetState,
         containerColor = colors.surface,
         contentColor = colors.textPrimary,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = FocusShapes.large,
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(vertical = 12.dp)
+                    .padding(top = 10.dp, bottom = 6.dp)
                     .width(36.dp)
                     .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(CircleShape)
                     .background(colors.border)
             )
         },
@@ -109,58 +106,39 @@ fun OnboardingChecklistSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header
+            // Compact Header: Title + Subtitle
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(colors.primary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                FocusMonolithMark(
+                    size = 22.dp,
+                    tint = colors.primary
+                )
                 Column {
                     Text(
-                        text = "Setup Checklist",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.5).sp
-                        ),
+                        text = "Setup checklist",
+                        style = FocusTypography.title,
                         color = colors.textPrimary
                     )
                     Text(
-                        text = if (allRequiredGranted) "All required permissions granted" else "$grantedCount of $requiredCount required steps complete",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (allRequiredGranted) Color(0xFF10B981) else colors.textMuted
+                        text = if (allRequiredGranted) "All required permissions granted"
+                        else "$grantedCount of $requiredCount required items complete",
+                        style = FocusTypography.caption,
+                        color = if (allRequiredGranted) colors.statusActive else colors.textSecondary
                     )
                 }
             }
 
-            Text(
-                text = "FocusShield runs 100% on-device. Grant the following system permissions so it can detect and block restricted apps.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.textMuted,
-                lineHeight = 20.sp
-            )
-
-            // Checklist Rows
+            // Compact Checklist Rows with 12dp spacing
             ChecklistRow(
-                title = "Accessibility Service",
-                description = "Detects foreground launches of blacklisted apps and blocks them instantly.",
+                title = "Accessibility service",
+                description = "Detects foreground restricted apps and blocks them.",
                 icon = Icons.Default.AccessibilityNew,
                 isGranted = isAccessibilityEnabled,
                 isRequired = true,
@@ -169,8 +147,8 @@ fun OnboardingChecklistSheet(
             )
 
             ChecklistRow(
-                title = "Display Over Other Apps",
-                description = "Shows the block screen and pause timer over restricted apps.",
+                title = "Display over other apps",
+                description = "Shows the block screen overlay above distracting apps.",
                 icon = Icons.Default.Layers,
                 isGranted = isOverlayEnabled,
                 isRequired = true,
@@ -179,8 +157,8 @@ fun OnboardingChecklistSheet(
             )
 
             ChecklistRow(
-                title = "Battery Optimization",
-                description = "Exempts FocusShield from background app standby killing.",
+                title = "Battery optimization",
+                description = "Prevents Android from putting the background guard to sleep.",
                 icon = Icons.Default.BatteryChargingFull,
                 isGranted = isBatteryIgnored,
                 isRequired = true,
@@ -189,8 +167,8 @@ fun OnboardingChecklistSheet(
             )
 
             ChecklistRow(
-                title = "Security PIN",
-                description = "Optional 4-digit PIN required to end active focus sessions or bypass restrictions.",
+                title = "App PIN",
+                description = "Optional 4-digit PIN required to cancel focus sessions.",
                 icon = Icons.Default.Lock,
                 isGranted = isPinConfigured,
                 isRequired = false,
@@ -199,28 +177,15 @@ fun OnboardingChecklistSheet(
                 onAction = { showPinDialog = true }
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             // Completion Action Button
-            Button(
+            FocusButton(
+                text = if (allRequiredGranted) "Complete setup" else "Complete required items ($grantedCount/$requiredCount)",
                 onClick = onComplete,
                 enabled = allRequiredGranted,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary,
-                    contentColor = Color.White,
-                    disabledContainerColor = if (colors.isDark) colors.surfaceVariant else Color(0xFFE2E8F0),
-                    disabledContentColor = colors.textMuted
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Text(
-                    text = if (allRequiredGranted) "Complete Setup" else "Enable Required Items ($grantedCount/$requiredCount)",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                )
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 
@@ -235,6 +200,12 @@ fun OnboardingChecklistSheet(
     }
 }
 
+/**
+ * Standardized compact checklist row.
+ * Uniform layout in all states:
+ * [Icon] -> [Column with Title & full-width description] -> [Status Badge or Action Button]
+ * Height derived purely from content, never stretched.
+ */
 @Composable
 private fun ChecklistRow(
     title: String,
@@ -243,124 +214,82 @@ private fun ChecklistRow(
     isGranted: Boolean,
     isRequired: Boolean,
     actionLabel: String,
-    grantedLabel: String = "Granted",
+    grantedLabel: String = "Enabled",
     onAction: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = colors.surfaceVariant.copy(alpha = 0.5f),
-        border = androidx.compose.foundation.BorderStroke(
+        shape = FocusShapes.medium,
+        color = colors.surface,
+        border = BorderStroke(
             1.dp,
-            if (isGranted) Color(0xFF10B981).copy(alpha = 0.4f) else colors.border
+            if (isGranted) colors.statusActive.copy(alpha = 0.3f) else colors.border
         ),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Icon (34dp)
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isGranted) Color(0xFF10B981).copy(alpha = 0.15f)
-                        else colors.surface
+                        if (isGranted) colors.statusActive.copy(alpha = 0.12f)
+                        else colors.surfaceVariant
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isGranted) Icons.Default.Check else icon,
                     contentDescription = null,
-                    tint = if (isGranted) Color(0xFF10B981) else colors.textPrimary,
-                    modifier = Modifier.size(20.dp)
+                    tint = if (isGranted) colors.statusActive else colors.textPrimary,
+                    modifier = Modifier.size(17.dp)
                 )
             }
 
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary
-                    )
-                    if (isGranted) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFF10B981).copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = grantedLabel,
-                                color = Color(0xFF10B981),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
-                                ),
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                            )
-                        }
-                    } else if (isRequired) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFFEF4444).copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = "Required",
-                                color = Color(0xFFEF4444),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
-                                ),
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(2.dp))
+            // Title & Full-width Description
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                    color = colors.textPrimary
+                )
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted,
-                    lineHeight = 16.sp
+                    style = FocusTypography.caption.copy(fontSize = 12.sp, lineHeight = 15.sp),
+                    color = colors.textSecondary
                 )
             }
 
-            if (!isGranted) {
-                Button(
-                    onClick = onAction,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.primary,
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier.height(36.dp)
+            // Status Badge (when granted) OR Action Button (when not granted)
+            if (isGranted) {
+                Surface(
+                    shape = FocusShapes.small,
+                    color = colors.statusActive.copy(alpha = 0.12f)
                 ) {
                     Text(
-                        text = actionLabel,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        text = grantedLabel,
+                        color = colors.statusActive,
+                        style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium, fontSize = 12.sp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
-            } else if (!isRequired) {
-                OutlinedButton(
-                    onClick = onAction,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Text(
-                        text = actionLabel,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.textPrimary
-                    )
-                }
+            } else {
+                FocusButton(
+                    text = actionLabel,
+                    onClick = onAction
+                )
             }
         }
     }
@@ -371,79 +300,73 @@ private fun PinSetupDialog(
     onDismiss: () -> Unit,
     onSavePin: (String) -> Unit
 ) {
-    val colors = BlockitTheme.colors
+    val colors = FocusTheme.colors
     var pin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
         title = {
             Text(
-                text = "Set Security PIN",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                text = "Set app PIN",
+                style = FocusTypography.title,
                 color = colors.textPrimary
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm)) {
                 Text(
-                    text = "Enter a 4-digit PIN to secure your focus sessions.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted
+                    text = "Enter a 4-digit PIN to prevent impulsively stopping focus sessions.",
+                    style = FocusTypography.bodySmall,
+                    color = colors.textSecondary
                 )
-
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) pin = it },
-                    label = { Text("4-digit PIN") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    onValueChange = { if (it.length <= 4) pin = it.filter { c -> c.isDigit() } },
+                    label = { Text("4-Digit PIN") },
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-
                 OutlinedTextField(
                     value = confirmPin,
-                    onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) confirmPin = it },
+                    onValueChange = { if (it.length <= 4) confirmPin = it.filter { c -> c.isDigit() } },
                     label = { Text("Confirm PIN") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                if (errorMessage != null) {
+                if (error != null) {
                     Text(
-                        text = errorMessage ?: "",
-                        color = Color(0xFFEF4444),
-                        style = MaterialTheme.typography.bodySmall
+                        text = error!!,
+                        color = colors.statusDestructive,
+                        style = FocusTypography.caption
                     )
                 }
             }
         },
         confirmButton = {
-            Button(
+            FocusButton(
+                text = "Save PIN",
                 onClick = {
                     if (pin.length != 4) {
-                        errorMessage = "PIN must be exactly 4 digits."
+                        error = "PIN must be 4 digits"
                     } else if (pin != confirmPin) {
-                        errorMessage = "PINs do not match."
+                        error = "PINs do not match"
                     } else {
                         onSavePin(pin)
                     }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
-            ) {
-                Text("Save PIN")
-            }
+                }
+            )
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = colors.textMuted)
+                Text("Cancel", color = colors.textSecondary)
             }
-        },
-        shape = RoundedCornerShape(16.dp)
+        }
     )
 }
