@@ -413,7 +413,9 @@ fun FocusButton(
         }
         Text(
             text = text,
-            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -455,7 +457,9 @@ fun FocusOutlinedButton(
         }
         Text(
             text = text,
-            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -495,7 +499,9 @@ fun FocusDestructiveButton(
         }
         Text(
             text = text,
-            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+            style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

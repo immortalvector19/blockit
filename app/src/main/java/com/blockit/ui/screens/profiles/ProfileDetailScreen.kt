@@ -23,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -174,7 +175,7 @@ fun ProfileDetailScreen(
                     onClick = { selectedTab = 0 },
                     text = {
                         Text(
-                            if (currentMode == BlockMode.WHITELIST) "Allowed apps (${blockedApps.size})" else "Blocked apps (${blockedApps.size})",
+                            "Apps (${blockedApps.size})",
                             style = FocusTypography.bodyMedium,
                             color = if (selectedTab == 0) colors.accent else colors.textSecondary
                         )
@@ -204,7 +205,7 @@ fun ProfileDetailScreen(
                 )
                 1 -> WebsitesTabContent(
                     domains = blockedDomains,
-                    onAddDomain = { showAddDomainDialog = true },
+                    onAddDomain = { pattern, isWildcard -> viewModel.addDomain(pattern, isWildcard) },
                     onRemoveDomain = { viewModel.removeDomain(it.id) }
                 )
             }
@@ -305,28 +306,63 @@ private fun AppsTabContent(
 @Composable
 private fun WebsitesTabContent(
     domains: List<BlockedDomain>,
-    onAddDomain: () -> Unit,
+    onAddDomain: (pattern: String, isWildcard: Boolean) -> Unit,
     onRemoveDomain: (BlockedDomain) -> Unit
 ) {
     val colors = FocusTheme.colors
+    var domainInput by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(FocusSpacing.md)
     ) {
-        FocusButton(
-            text = "Add website rule",
-            leadingIcon = Icons.Rounded.Add,
-            onClick = onAddDomain,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // Direct Domain Input Row: automatically cleans scheme, 'www.', path, query
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = domainInput,
+                onValueChange = { domainInput = it },
+                placeholder = { Text("e.g. reddit.com, youtube.com", color = colors.textMuted) },
+                singleLine = true,
+                shape = FocusShapes.small,
+                modifier = Modifier.weight(1f),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.border,
+                    focusedContainerColor = colors.surface,
+                    unfocusedContainerColor = colors.surface,
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary
+                )
+            )
+
+            FocusButton(
+                text = "Add",
+                onClick = {
+                    val raw = domainInput.trim()
+                    if (raw.isNotBlank()) {
+                        val isWildcard = raw.contains('*')
+                        val finalPattern = if (isWildcard) raw.lowercase() else DomainMatcher.extractCleanHost(raw)
+                        if (finalPattern.isNotBlank()) {
+                            onAddDomain(finalPattern, isWildcard)
+                            domainInput = ""
+                        }
+                    }
+                },
+                enabled = domainInput.isNotBlank()
+            )
+        }
 
         Spacer(modifier = Modifier.height(FocusSpacing.md))
 
         if (domains.isEmpty()) {
             FocusEmptyState(
                 title = "No website rules",
-                message = "Block distracting websites by adding domain names or patterns.",
+                message = "Block distracting websites by adding domain names above. Subdomains are automatically included.",
                 icon = Icons.Rounded.Language,
                 modifier = Modifier.weight(1f)
             )
@@ -348,6 +384,14 @@ private fun WebsitesTabContent(
                                 .padding(FocusSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Language,
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier
+                                    .padding(start = FocusSpacing.xs, end = FocusSpacing.sm)
+                                    .size(20.dp)
+                            )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = domain.pattern,
@@ -355,9 +399,9 @@ private fun WebsitesTabContent(
                                     color = colors.textPrimary
                                 )
                                 Text(
-                                    text = if (domain.isWildcard) "Wildcard pattern" else "Domain and subdomains",
+                                    text = if (domain.isWildcard) "Wildcard pattern" else "Domain and subdomains included",
                                     style = FocusTypography.caption,
-                                    color = colors.accent
+                                    color = colors.textSecondary
                                 )
                             }
                             IconButton(onClick = { onRemoveDomain(domain) }) {

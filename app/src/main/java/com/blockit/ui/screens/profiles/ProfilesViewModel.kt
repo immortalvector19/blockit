@@ -59,10 +59,11 @@ class ProfilesViewModel(
         daysMask: Int = 127,
         startMinute: Int = 540,
         endMinute: Int = 1020,
+        domains: List<String> = emptyList(),
         blockMode: com.blockit.domain.model.BlockMode = if (listType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST
     ) {
         viewModelScope.launch {
-            profileRepository.createProfile(
+            val profileId = profileRepository.createProfile(
                 name = name,
                 colorHex = colorHex,
                 iconKey = iconKey,
@@ -73,6 +74,9 @@ class ProfilesViewModel(
                 endMinute = endMinute,
                 blockMode = blockMode
             )
+            for (domain in domains) {
+                profileRepository.addDomainToProfile(profileId, domain, domain.contains('*'))
+            }
             ruleEvaluator.refreshRules()
         }
     }

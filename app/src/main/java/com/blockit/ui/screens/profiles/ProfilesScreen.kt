@@ -258,14 +258,15 @@ fun ProfilesScreen(
         if (showCreateDialog) {
             CreateProfileDialog(
                 onDismiss = { showCreateDialog = false },
-                onConfirm = { name, profileType, listType, daysMask, startMinute, endMinute ->
+                onConfirmWithDomains = { name, profileType, listType, daysMask, startMinute, endMinute, domains ->
                     viewModel.createProfile(
                         name = name,
                         profileType = profileType,
                         listType = listType,
                         daysMask = daysMask,
                         startMinute = startMinute,
-                        endMinute = endMinute
+                        endMinute = endMinute,
+                        domains = domains
                     )
                     showCreateDialog = false
                 }
@@ -552,10 +553,7 @@ private fun ProfileCard(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST)
-                        "${profile.appCount} permitted apps"
-                    else
-                        "${profile.appCount} apps • ${profile.domainCount} websites",
+                    text = "${profile.appCount} apps, ${profile.domainCount} sites",
                     style = FocusTypography.caption,
                     color = colors.textSecondary
                 )

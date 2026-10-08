@@ -24,8 +24,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.NightsStay
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.FilterChip
@@ -35,6 +38,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.runtime.mutableStateListOf
+import com.blockit.domain.matcher.DomainMatcher
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -78,7 +85,16 @@ fun CreateProfileDialog(
         daysMask: Int,
         startMinute: Int,
         endMinute: Int
-    ) -> Unit
+    ) -> Unit = { _, _, _, _, _, _ -> },
+    onConfirmWithDomains: (
+        name: String,
+        profileType: ProfileType,
+        listType: ListType,
+        daysMask: Int,
+        startMinute: Int,
+        endMinute: Int,
+        domains: List<String>
+    ) -> Unit = { n, pt, lt, dm, sm, em, _ -> onConfirm(n, pt, lt, dm, sm, em) }
 ) {
     val colors = FocusTheme.colors
 
@@ -90,6 +106,10 @@ fun CreateProfileDialog(
     var startMinute by rememberSaveable { mutableIntStateOf(initialStartMinute) }
     var endMinute by rememberSaveable { mutableIntStateOf(initialEndMinute) }
     var timePickerTarget by rememberSaveable { mutableStateOf<String?>(null) }
+
+    var activeRuleTab by rememberSaveable { mutableIntStateOf(0) }
+    var newDomainInput by rememberSaveable { mutableStateOf("") }
+    val addedDomains = remember { mutableStateListOf<String>() }
 
     androidx.activity.compose.BackHandler(onBack = onDismiss)
     Surface(
@@ -368,6 +388,191 @@ fun CreateProfileDialog(
                             }
                         }
                     }
+
+                    // SECTION 5: Rules (Apps & Websites Tabs)
+                    Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.xs)) {
+                        Text(
+                            text = "Rules",
+                            style = FocusTypography.label,
+                            color = colors.textSecondary
+                        )
+
+                        TabRow(
+                            selectedTabIndex = activeRuleTab,
+                            containerColor = colors.surfaceVariant,
+                            contentColor = colors.accent
+                        ) {
+                            Tab(
+                                selected = activeRuleTab == 0,
+                                onClick = { activeRuleTab = 0 },
+                                text = {
+                                    Text(
+                                        "Apps",
+                                        style = FocusTypography.bodyMedium,
+                                        color = if (activeRuleTab == 0) colors.accent else colors.textSecondary
+                                    )
+                                },
+                                icon = {
+                                    Icon(
+                                        Icons.Rounded.PhoneAndroid,
+                                        contentDescription = null,
+                                        tint = if (activeRuleTab == 0) colors.accent else colors.textSecondary
+                                    )
+                                }
+                            )
+                            Tab(
+                                selected = activeRuleTab == 1,
+                                onClick = { activeRuleTab = 1 },
+                                text = {
+                                    Text(
+                                        "Websites (${addedDomains.size})",
+                                        style = FocusTypography.bodyMedium,
+                                        color = if (activeRuleTab == 1) colors.accent else colors.textSecondary
+                                    )
+                                },
+                                icon = {
+                                    Icon(
+                                        Icons.Rounded.Language,
+                                        contentDescription = null,
+                                        tint = if (activeRuleTab == 1) colors.accent else colors.textSecondary
+                                    )
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(FocusSpacing.xs))
+
+                        if (activeRuleTab == 0) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = FocusShapes.medium,
+                                color = colors.surface,
+                                border = BorderStroke(1.dp, colors.border)
+                            ) {
+                                Column(modifier = Modifier.padding(FocusSpacing.md)) {
+                                    Text(
+                                        text = if (selectedListType == ListType.ALLOWLIST) "Permitted apps" else "Blocked apps",
+                                        style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = colors.textPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (selectedListType == ListType.ALLOWLIST)
+                                            "You can choose permitted apps after creating, or directly in the profile editor."
+                                        else
+                                            "You can choose blocked apps after creating, or directly in the profile editor.",
+                                        style = FocusTypography.caption,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = FocusShapes.medium,
+                                color = colors.surface,
+                                border = BorderStroke(1.dp, colors.border)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(FocusSpacing.md),
+                                    verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = newDomainInput,
+                                            onValueChange = { newDomainInput = it },
+                                            placeholder = { Text("e.g. reddit.com, youtube.com", color = colors.textMuted) },
+                                            singleLine = true,
+                                            shape = FocusShapes.small,
+                                            modifier = Modifier.weight(1f),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = colors.primary,
+                                                unfocusedBorderColor = colors.border,
+                                                focusedContainerColor = colors.surfaceVariant,
+                                                unfocusedContainerColor = colors.surfaceVariant,
+                                                focusedTextColor = colors.textPrimary,
+                                                unfocusedTextColor = colors.textPrimary
+                                            )
+                                        )
+
+                                        FocusButton(
+                                            text = "Add",
+                                            onClick = {
+                                                val raw = newDomainInput.trim()
+                                                if (raw.isNotBlank()) {
+                                                    val isWildcard = raw.contains('*')
+                                                    val clean = if (isWildcard) raw.lowercase() else DomainMatcher.extractCleanHost(raw)
+                                                    if (clean.isNotBlank() && !addedDomains.contains(clean)) {
+                                                        addedDomains.add(clean)
+                                                        newDomainInput = ""
+                                                    }
+                                                }
+                                            },
+                                            enabled = newDomainInput.isNotBlank()
+                                        )
+                                    }
+
+                                    if (addedDomains.isEmpty()) {
+                                        Text(
+                                            text = "No websites added yet. Subdomains are automatically included.",
+                                            style = FocusTypography.caption,
+                                            color = colors.textSecondary
+                                        )
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.xs)) {
+                                            addedDomains.forEach { domain ->
+                                                Surface(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = FocusShapes.small,
+                                                    color = colors.surfaceVariant
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = FocusSpacing.sm, vertical = FocusSpacing.xs),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.Language,
+                                                                contentDescription = null,
+                                                                tint = colors.accent,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Text(
+                                                                text = domain,
+                                                                style = FocusTypography.bodyMedium,
+                                                                color = colors.textPrimary
+                                                            )
+                                                        }
+                                                        IconButton(
+                                                            onClick = { addedDomains.remove(domain) },
+                                                            modifier = Modifier.size(32.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.Delete,
+                                                                contentDescription = "Remove website",
+                                                                tint = colors.textSecondary,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Bottom Fixed Action Bar
@@ -385,13 +590,14 @@ fun CreateProfileDialog(
                             text = "Create profile",
                             onClick = {
                                 if (name.isNotBlank()) {
-                                    onConfirm(
+                                    onConfirmWithDomains(
                                         name.trim(),
                                         selectedProfileType,
                                         selectedListType,
                                         daysMask,
                                         startMinute,
-                                        endMinute
+                                        endMinute,
+                                        addedDomains.toList()
                                     )
                                 }
                             },

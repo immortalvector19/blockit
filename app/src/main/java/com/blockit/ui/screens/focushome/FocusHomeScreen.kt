@@ -304,15 +304,14 @@ fun FocusHomeScreen(
 
             Spacer(modifier = Modifier.height(FocusSpacing.md))
 
-            // Bottom Actions: Large Emergency Dialer + Stop Session
-            Column(
+            // Bottom Actions: Compact Round Call Button + Stop Session
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
+                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Phone Button
-                FocusButton(
-                    text = "Phone / Dialer",
-                    leadingIcon = Icons.Rounded.Phone,
+                // Compact round call button (phone icon, content description "Call")
+                Surface(
                     onClick = {
                         val dialerPkg = com.blockit.core.system.AndroidSystemAppResolver(context).getDefaultDialerPackage() ?: "com.android.dialer"
                         com.blockit.core.engine.EngineLifecycleMonitor.markPermittedAppLaunched(dialerPkg)
@@ -321,8 +320,20 @@ fun FocusHomeScreen(
                         }
                         context.startActivity(dialIntent)
                     },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    shape = CircleShape,
+                    color = colors.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Phone,
+                            contentDescription = "Call",
+                            tint = colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
 
                 // Stop Focus Session with friction
                 if (strictness == SessionStrictness.LOCKED) {
@@ -330,14 +341,14 @@ fun FocusHomeScreen(
                         text = "Locked until timer expires",
                         leadingIcon = Icons.Rounded.Lock,
                         onClick = { showStopDialog = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
                     )
                 } else {
                     FocusDestructiveButton(
                         text = if (strictness == SessionStrictness.STRICT) "Stop focus (strict challenge)" else "Stop focus early",
                         leadingIcon = Icons.Rounded.Stop,
                         onClick = { showStopDialog = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }

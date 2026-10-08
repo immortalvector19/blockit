@@ -178,7 +178,8 @@ class MainDashboardViewModel(
         listType: com.blockit.domain.model.ListType = com.blockit.domain.model.ListType.BLOCKLIST,
         daysMask: Int = 127,
         startMinute: Int = 540,
-        endMinute: Int = 1020
+        endMinute: Int = 1020,
+        domains: List<String> = emptyList()
     ) {
         viewModelScope.launch {
             val id = profileRepository.createProfile(
@@ -189,6 +190,9 @@ class MainDashboardViewModel(
                 startMinute = startMinute,
                 endMinute = endMinute
             )
+            for (domain in domains) {
+                profileRepository.addDomainToProfile(id, domain, domain.contains('*'))
+            }
             _selectedProfileId.value = id
             ruleEvaluator.refreshRules()
             scheduleManager.scheduleNextBoundaryAlarm()

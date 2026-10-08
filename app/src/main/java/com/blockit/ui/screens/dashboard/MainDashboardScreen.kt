@@ -46,6 +46,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
@@ -207,6 +208,7 @@ fun MainDashboardScreen(
     onOpenSetupGuideClick: () -> Unit = onOpenSettingsClick,
     onOpenBackupRestoreClick: () -> Unit = onOpenSettingsClick,
     onOpenHowItWorksClick: () -> Unit = onOpenSettingsClick,
+    onEditProfileClick: (Long) -> Unit = onAddAppsClick,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -506,7 +508,7 @@ fun MainDashboardScreen(
                         profiles = profiles,
                         allProfileApps = allProfileApps,
                         activeSession = activeSession,
-                        onAddApps = { id -> onAddAppsClick(id) },
+                        onAddApps = { id -> onEditProfileClick(id) },
                         onActivateProfile = { id ->
                             targetProfileIdForDuration = id
                             showProfileDurationSheet = true
@@ -1326,20 +1328,24 @@ private fun DashboardHomeContent(
 
                 Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
-                // Template quick-add buttons
+                // Template quick-add buttons (horizontally scrollable so labels never wrap at any font scale)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
                 ) {
                     FocusOutlinedButton(
                         text = "+ Work hours",
-                        onClick = { onCreateTemplateProfile("WORK") },
-                        modifier = Modifier.weight(1f)
+                        onClick = { onCreateTemplateProfile("WORK") }
                     )
                     FocusOutlinedButton(
                         text = "+ Sleep and rest",
-                        onClick = { onCreateTemplateProfile("SLEEP") },
-                        modifier = Modifier.weight(1f)
+                        onClick = { onCreateTemplateProfile("SLEEP") }
+                    )
+                    FocusOutlinedButton(
+                        text = "+ Deep study",
+                        onClick = { onCreateTemplateProfile("STUDY") }
                     )
                 }
 
@@ -1924,7 +1930,7 @@ private fun ProfilesTabContent(
                                 text = if (profile.blockMode == BlockMode.WHITELIST || profile.listType == ListType.ALLOWLIST)
                                     "${apps.size} permitted apps. All other apps locked."
                                 else
-                                    "${apps.size} blocked apps, ${profile.domainCount} websites.",
+                                    "${apps.size} apps, ${profile.domainCount} sites",
                                 style = FocusTypography.caption,
                                 color = colors.textSecondary
                             )
@@ -2530,12 +2536,9 @@ private fun ScheduleProfileCard(
 
             Spacer(modifier = Modifier.height(FocusSpacing.xs))
 
-            // Apps summary
+            // Apps & sites summary
             Text(
-                text = if (profile.listType == ListType.ALLOWLIST || profile.blockMode == BlockMode.WHITELIST)
-                    if (apps.isEmpty()) "No permitted apps selected" else "${apps.size} permitted apps"
-                else
-                    if (apps.isEmpty()) "No blocked apps selected" else "${apps.size} blocked apps",
+                text = "${apps.size} apps, ${profile.domainCount} sites",
                 style = FocusTypography.caption,
                 color = colors.textSecondary
             )

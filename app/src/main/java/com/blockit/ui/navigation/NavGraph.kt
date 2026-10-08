@@ -133,6 +133,9 @@ fun BlockItNavHost(
                 onAddAppsClick = { profileId ->
                     navController.navigate(NavRoutes.addApps(profileId))
                 },
+                onEditProfileClick = { profileId ->
+                    navController.navigate(NavRoutes.profileDetail(profileId))
+                },
                 onOpenSettingsClick = {
                     navController.navigate(NavRoutes.SETTINGS_HUB)
                 },
