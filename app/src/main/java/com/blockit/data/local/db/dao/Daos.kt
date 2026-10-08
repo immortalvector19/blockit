@@ -127,6 +127,9 @@ interface BlockedDomainDao {
 
     @Delete
     suspend fun deleteDomain(domain: BlockedDomainEntity)
+
+    @Query("DELETE FROM blocked_domains WHERE id = :domainId")
+    suspend fun deleteDomainById(domainId: Long)
 }
 
 @Dao

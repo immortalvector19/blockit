@@ -290,9 +290,7 @@ class ProfileRepository(
     }
 
     suspend fun removeDomainFromProfile(domainId: Long) {
-        blockedDomainDao.deleteDomain(
-            BlockedDomainEntity(id = domainId, profileId = 0, pattern = "", isWildcard = false)
-        )
+        blockedDomainDao.deleteDomainById(domainId)
     }
 
     fun observeAllSchedules(): Flow<List<Schedule>> {
