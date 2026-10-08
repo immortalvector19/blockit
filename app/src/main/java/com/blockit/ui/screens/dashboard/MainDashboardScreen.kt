@@ -60,7 +60,9 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.Shield
+import com.blockit.domain.model.ThemeMode
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Menu
@@ -227,6 +229,7 @@ fun MainDashboardScreen(
     val insightsData by viewModel.insightsData.collectAsState()
     val selectedProfileId by viewModel.selectedProfileId.collectAsState()
     val allProfileApps by viewModel.allProfileApps.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
 
     // Strict Mode friction state
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -390,36 +393,75 @@ fun MainDashboardScreen(
                 HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Dark Theme Quick Toggle
-                Row(
+                // Theme Chooser Section
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (colors.isDark) Icons.Default.DarkMode else Icons.Default.LightMode,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = "Dark Mode",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = colors.textPrimary
-                        )
-                    }
-                    Switch(
-                        checked = colors.isDark,
-                        onCheckedChange = { viewModel.toggleDarkMode() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = colors.primary
-                        )
+                    Text(
+                        text = "THEME",
+                        style = FocusTypography.caption.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        ),
+                        color = colors.textTertiary,
+                        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
                     )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (colors.isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9))
+                            .border(1.dp, colors.border.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val currentTheme = themeMode
+                        val options = listOf(
+                            Triple("System", Icons.Default.SettingsBrightness, ThemeMode.SYSTEM),
+                            Triple("Light", Icons.Default.LightMode, ThemeMode.LIGHT),
+                            Triple("Dark", Icons.Default.DarkMode, ThemeMode.DARK)
+                        )
+
+                        options.forEach { (label, icon, mode) ->
+                            val isSelected = currentTheme == mode
+                            Surface(
+                                onClick = { viewModel.setThemeMode(mode) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) colors.surface else Color.Transparent,
+                                border = if (isSelected) BorderStroke(1.dp, colors.border) else null,
+                                shadowElevation = if (isSelected) 1.dp else 0.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = label,
+                                        tint = if (isSelected) colors.primary else colors.textSecondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = label,
+                                        style = FocusTypography.caption.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        ),
+                                        color = if (isSelected) colors.textPrimary else colors.textSecondary,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 NavigationDrawerItem(
@@ -1126,7 +1168,10 @@ private fun DashboardHomeContent(
                                 Text(
                                     text = when {
                                         targetProfile == null -> "Tap to choose a profile"
-                                        targetProfile.blockMode == BlockMode.WHITELIST || targetProfile.listType == ListType.ALLOWLIST -> "${targetProfile.appCount} permitted apps"
+                                        targetProfile.blockMode == BlockMode.WHITELIST || targetProfile.listType == ListType.ALLOWLIST -> {
+                                            if (targetProfile.domainCount > 0) "${targetProfile.appCount} apps, ${targetProfile.domainCount} sites"
+                                            else "${targetProfile.appCount} permitted apps"
+                                        }
                                         else -> "${targetProfile.appCount} apps, ${targetProfile.domainCount} sites"
                                     },
                                     style = FocusTypography.caption,
@@ -1336,15 +1381,18 @@ private fun DashboardHomeContent(
                     horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
                 ) {
                     FocusOutlinedButton(
-                        text = "+ Work hours",
+                        text = "Work hours",
+                        leadingIcon = Icons.Default.Add,
                         onClick = { onCreateTemplateProfile("WORK") }
                     )
                     FocusOutlinedButton(
-                        text = "+ Sleep and rest",
+                        text = "Sleep/rest",
+                        leadingIcon = Icons.Default.Add,
                         onClick = { onCreateTemplateProfile("SLEEP") }
                     )
                     FocusOutlinedButton(
-                        text = "+ Deep study",
+                        text = "Deep study",
+                        leadingIcon = Icons.Default.Add,
                         onClick = { onCreateTemplateProfile("STUDY") }
                     )
                 }

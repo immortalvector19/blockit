@@ -193,6 +193,47 @@ class RuleEvaluatorTest {
     }
 
     @Test
+    fun isDomainBlocked_whitelistMode_permitsOnlyWhitelistedDomains() {
+        evaluator.setSnapshot(
+            ActiveRuleSnapshot(
+                hasActiveWhitelist = true,
+                whitelistProfileName = "Study Focus",
+                whitelistDomains = setOf("wikipedia.org", "docs.google.com")
+            )
+        )
+
+        // Whitelisted domain and subdomains are allowed
+        assertFalse("Exact whitelisted domain should be allowed", evaluator.isDomainBlocked("wikipedia.org").isBlocked)
+        assertFalse("Subdomain of whitelisted domain should be allowed", evaluator.isDomainBlocked("https://en.wikipedia.org/wiki/Kotlin").isBlocked)
+        assertFalse("Whitelisted subdomain should be allowed", evaluator.isDomainBlocked("https://docs.google.com/document/d/123").isBlocked)
+
+        // Non-whitelisted domains are strictly blocked in whitelist mode
+        val blockedYt = evaluator.isDomainBlocked("https://youtube.com")
+        assertTrue("Non-whitelisted domain must be blocked in whitelist mode", blockedYt.isBlocked)
+        assertTrue("Must be marked as whitelist block", blockedYt.isWhitelistBlock)
+        assertEquals("Study Focus", blockedYt.profileName)
+
+        val blockedInsta = evaluator.isDomainBlocked("instagram.com")
+        assertTrue("Non-whitelisted domain must be blocked in whitelist mode", blockedInsta.isBlocked)
+        assertTrue("Must be marked as whitelist block", blockedInsta.isWhitelistBlock)
+    }
+
+    @Test
+    fun isDomainBlocked_whitelistMode_emptyWhitelist_blocksAllDomains() {
+        evaluator.setSnapshot(
+            ActiveRuleSnapshot(
+                hasActiveWhitelist = true,
+                whitelistProfileName = "No Web Allowed",
+                whitelistDomains = emptySet()
+            )
+        )
+
+        val eval = evaluator.isDomainBlocked("https://google.com")
+        assertTrue("All domains blocked when whitelist is empty", eval.isBlocked)
+        assertTrue(eval.isWhitelistBlock)
+    }
+
+    @Test
     fun testReproduction_userScenario_anikku_bolt_aniyomi() {
         val targetApps = listOf("com.anikku.app", "bolt.delivery.client", "com.aniyomi.app")
 

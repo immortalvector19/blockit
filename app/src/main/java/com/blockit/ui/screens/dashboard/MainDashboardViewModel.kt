@@ -105,6 +105,12 @@ class MainDashboardViewModel(
         }
     }
 
+    fun setThemeMode(mode: com.blockit.domain.model.ThemeMode) {
+        viewModelScope.launch {
+            preferenceManager.setThemeMode(mode)
+        }
+    }
+
     private val _isProfilesLoading = MutableStateFlow(true)
     val isProfilesLoading: StateFlow<Boolean> = _isProfilesLoading.asStateFlow()
 

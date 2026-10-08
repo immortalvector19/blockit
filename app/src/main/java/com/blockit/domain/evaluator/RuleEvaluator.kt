@@ -27,6 +27,7 @@ data class ActiveRuleSnapshot(
     val hasActiveWhitelist: Boolean = false,
     val whitelistProfileName: String? = null,
     val whitelistPackages: Set<String> = emptySet(),
+    val whitelistDomains: Set<String> = emptySet(),
     val isScheduleActive: Boolean = false,
     val activeScheduleProfileName: String? = null,
     val activeScheduleProfileId: Long? = null,
@@ -148,6 +149,7 @@ open class RuleEvaluator(
         val packageMap = mutableMapOf<String, String>()
         val domainMap = mutableMapOf<String, String>()
         val whitelistPackages = mutableSetOf<String>()
+        val whitelistDomains = mutableSetOf<String>()
         var activeWhitelistName: String? = null
         var hasWhitelist = false
 
@@ -156,6 +158,7 @@ open class RuleEvaluator(
             val profileName = profile.name
 
             val apps = db.blockedAppDao().getAppsForProfile(profileId)
+            val domains = db.blockedDomainDao().getDomainsForProfile(profileId)
 
             if (profile.listType == "ALLOWLIST" || profile.blockMode == "WHITELIST") {
                 hasWhitelist = true
@@ -163,11 +166,13 @@ open class RuleEvaluator(
                 for (app in apps) {
                     whitelistPackages.add(app.packageName)
                 }
+                for (domain in domains) {
+                    whitelistDomains.add(domain.pattern)
+                }
             } else {
                 for (app in apps) {
                     packageMap[app.packageName] = profileName
                 }
-                val domains = db.blockedDomainDao().getDomainsForProfile(profileId)
                 for (domain in domains) {
                     domainMap[domain.pattern] = profileName
                 }
@@ -180,6 +185,7 @@ open class RuleEvaluator(
             hasActiveWhitelist = hasWhitelist,
             whitelistProfileName = activeWhitelistName,
             whitelistPackages = whitelistPackages,
+            whitelistDomains = whitelistDomains,
             isScheduleActive = isAnyScheduleActive,
             activeScheduleProfileName = activeSchedName,
             activeScheduleProfileId = activeSchedId,
@@ -248,6 +254,23 @@ open class RuleEvaluator(
         if (cleanHost.isBlank()) return EvaluationResult(isBlocked = false)
 
         val snapshot = cachedSnapshot
+
+        // Whitelist mode: if active, ONLY explicitly whitelisted websites are allowed
+        if (snapshot.hasActiveWhitelist) {
+            val isPermitted = snapshot.whitelistDomains.any { DomainMatcher.matches(cleanHost, it) }
+            if (!isPermitted) {
+                return EvaluationResult(
+                    isBlocked = true,
+                    matchedTarget = cleanHost,
+                    profileName = snapshot.whitelistProfileName ?: "Allowlist Mode",
+                    reason = "Only permitted websites can be opened during Allowlist Focus Mode",
+                    isWhitelistBlock = true
+                )
+            }
+            return EvaluationResult(isBlocked = false)
+        }
+
+        // Blacklist mode: check if domain is on the blocklist
         for ((pattern, profileName) in snapshot.blockedDomains) {
             if (DomainMatcher.matches(cleanHost, pattern)) {
                 return EvaluationResult(
