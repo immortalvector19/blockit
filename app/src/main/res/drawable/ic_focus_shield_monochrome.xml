@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- FocusShield Monochrome Layer for Material You Themed Icons -->
+    <group
+        android:pivotX="128"
+        android:pivotY="128"
+        android:scaleX="0.25"
+        android:scaleY="0.25"
+        android:translateX="-74"
+        android:translateY="-74">
+
+        <!-- Unified Monolithic Silhouette -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M 128,22 L 214,72 V 184 L 128,234 L 42,184 V 72 Z M 128,56 L 180,86 V 170 L 128,200 L 76,170 V 86 Z" />
+
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M 108,108 H 148 V 148 H 108 Z M 92,125 H 164 V 131 H 92 Z" />
+    </group>
+</vector>

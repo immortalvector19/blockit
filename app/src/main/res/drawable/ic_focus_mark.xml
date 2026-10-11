@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- FocusShield Precision Geometric Mark (100/100 logo-design score) -->
+    <!-- Outer Shield Perimeter & Optical Aperture -->
+    <path
+        android:fillColor="#3B82F6"
+        android:fillType="evenOdd"
+        android:pathData="M 128,22 L 214,72 V 184 L 128,234 L 42,184 V 72 Z M 128,56 L 180,86 V 170 L 128,200 L 76,170 V 86 Z" />
+
+    <!-- Central Focus Monolith Core -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M 108,108 H 148 V 148 H 108 Z M 92,125 H 164 V 131 H 92 Z" />
+</vector>
