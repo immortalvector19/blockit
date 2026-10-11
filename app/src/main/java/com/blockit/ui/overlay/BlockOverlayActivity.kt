@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.blockit.core.BlockItApplication
 import com.blockit.domain.model.SessionStrictness
 import com.blockit.ui.theme.BlockItTheme
@@ -16,12 +18,59 @@ class BlockOverlayActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                kickToHome()
+            }
+        })
+        handleOverlayIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent?.let { handleOverlayIntent(it) }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isShowing = true
+        currentBlockedTarget = currentTarget
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isShowing = true
+        currentBlockedTarget = currentTarget
+    }
+
+    override fun onStop() {
+        super.onStop()
+        isShowing = false
+        if (currentBlockedTarget == currentTarget) {
+            currentBlockedTarget = null
+        }
+        if (!isChangingConfigurations) {
+            finish()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        isShowing = false
+        if (currentBlockedTarget == currentTarget) {
+            currentBlockedTarget = null
+        }
+    }
+
+    private fun handleOverlayIntent(intent: Intent) {
         val container = BlockItApplication.from(this)
 
         val target = intent.getStringExtra(EXTRA_TARGET) ?: "Blocked App"
         currentTarget = target
         isShowing = true
         currentBlockedTarget = target
+
         val profile = intent.getStringExtra(EXTRA_PROFILE) ?: "Active Profile"
         val reason = intent.getStringExtra(EXTRA_REASON) ?: "Focus mode active"
         val strictnessStr = intent.getStringExtra(EXTRA_STRICTNESS) ?: SessionStrictness.NORMAL.name
@@ -33,15 +82,22 @@ class BlockOverlayActivity : ComponentActivity() {
         val canRequestPause = intent.getBooleanExtra(EXTRA_CAN_PAUSE, true)
         val remainingPauses = intent.getIntExtra(EXTRA_REMAINING_PAUSES, 3)
         val maxPauses = intent.getIntExtra(EXTRA_MAX_PAUSES, 3)
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                kickToHome()
-            }
-        })
+        val sessionEndMs = intent.getLongExtra(EXTRA_SESSION_END_MS, 0L)
 
         setContent {
             BlockItTheme(darkTheme = true) {
+                val snapshot by container.ruleEvaluator.snapshotFlow.collectAsState()
+                val activeSession by androidx.compose.runtime.remember { container.focusSessionManager.observeActiveSession() }.collectAsState(
+                    initial = container.focusSessionManager.getCachedActiveSession()
+                )
+                val effectiveSessionEndMs = activeSession?.endTimestamp
+                    ?: snapshot.activeSessionEndTimestampMs
+                    ?: snapshot.activeScheduleEndTimestampMs
+                    ?: sessionEndMs
+
+                val isBreakActive by container.intentPassManager.isBreakActiveFlow.collectAsState()
+                val breakExpiresAtMs by container.intentPassManager.breakExpiresAtMsFlow.collectAsState()
+
                 BlockScreenContent(
                     targetIdentifier = target,
                     profileName = profile,
@@ -50,12 +106,17 @@ class BlockOverlayActivity : ComponentActivity() {
                     canRequestPause = canRequestPause,
                     remainingPauses = remainingPauses,
                     maxPauses = maxPauses,
+                    sessionEndMs = effectiveSessionEndMs,
+                    scheduleEndMs = snapshot.activeScheduleEndTimestampMs,
+                    isBreakActive = isBreakActive,
+                    breakExpiresAtMs = breakExpiresAtMs,
                     onHomeClicked = {
                         kickToHome()
                     },
                     onGrantPause = { minutes ->
                         val durationMs = minutes * 60 * 1000L
                         container.intentPassManager.grantPass(target, minutes)
+                        container.intentPassManager.grantBreak(minutes)
 
                         val appLabel = try {
                             val appInfo = packageManager.getApplicationInfo(target, 0)
@@ -64,15 +125,18 @@ class BlockOverlayActivity : ComponentActivity() {
                             target
                         }
 
-                        container.overlayController.showPauseCountdownPill(
-                            appName = appLabel,
-                            expiresAtMs = System.currentTimeMillis() + durationMs,
-                            onEndPauseEarly = {
-                                container.intentPassManager.revokePass(target)
-                                container.overlayController.hidePauseCountdownPill()
-                                kickToHome()
-                            }
-                        )
+                        if (container.overlayController.canDrawOverlays()) {
+                            container.overlayController.showPauseCountdownPill(
+                                appName = appLabel,
+                                expiresAtMs = System.currentTimeMillis() + durationMs,
+                                onEndPauseEarly = {
+                                    container.intentPassManager.revokePass(target)
+                                    container.intentPassManager.endBreak()
+                                    container.overlayController.hidePauseCountdownPill()
+                                    kickToHome()
+                                }
+                            )
+                        }
 
                         val launchIntent = packageManager.getLaunchIntentForPackage(target)
                         launchIntent?.let {
@@ -83,14 +147,6 @@ class BlockOverlayActivity : ComponentActivity() {
                     }
                 )
             }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        isShowing = false
-        if (currentBlockedTarget == currentTarget) {
-            currentBlockedTarget = null
         }
     }
 
@@ -121,6 +177,7 @@ class BlockOverlayActivity : ComponentActivity() {
         private const val EXTRA_CAN_PAUSE = "extra_can_pause"
         private const val EXTRA_REMAINING_PAUSES = "extra_remaining_pauses"
         private const val EXTRA_MAX_PAUSES = "extra_max_pauses"
+        private const val EXTRA_SESSION_END_MS = "extra_session_end_ms"
 
         fun start(
             context: Context,
@@ -130,7 +187,8 @@ class BlockOverlayActivity : ComponentActivity() {
             strictness: SessionStrictness = SessionStrictness.NORMAL,
             canRequestPause: Boolean = true,
             remainingPauses: Int = 3,
-            maxPauses: Int = 3
+            maxPauses: Int = 3,
+            sessionEndMs: Long = 0L
         ) {
             // Guard: If already showing the block screen for this target, avoid redundant re-launches
             if (isShowing && currentBlockedTarget == target) {
@@ -145,6 +203,7 @@ class BlockOverlayActivity : ComponentActivity() {
                 putExtra(EXTRA_CAN_PAUSE, canRequestPause)
                 putExtra(EXTRA_REMAINING_PAUSES, remainingPauses)
                 putExtra(EXTRA_MAX_PAUSES, maxPauses)
+                putExtra(EXTRA_SESSION_END_MS, sessionEndMs)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
                         Intent.FLAG_ACTIVITY_SINGLE_TOP or

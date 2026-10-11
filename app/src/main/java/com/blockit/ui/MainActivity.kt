@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
 
     private fun checkWhitelistLockdown(container: com.blockit.core.di.AppContainer) {
         val snapshot = container.ruleEvaluator.getSnapshot()
-        if (snapshot.hasActiveWhitelist) {
+        if (snapshot.hasActiveWhitelist && !snapshot.isWhitelistExpired()) {
             val intent = android.content.Intent(this, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }

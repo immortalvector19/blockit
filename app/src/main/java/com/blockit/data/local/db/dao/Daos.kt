@@ -179,6 +179,9 @@ interface FocusSessionDao {
     @Query("UPDATE focus_sessions SET isActive = 0 WHERE id = :sessionId")
     suspend fun endSession(sessionId: Long)
 
+    @Query("UPDATE focus_sessions SET endTimestamp = endTimestamp + :extensionMs WHERE id = :sessionId")
+    suspend fun extendSessionEndTime(sessionId: Long, extensionMs: Long)
+
     @Query("UPDATE focus_sessions SET isActive = 0 WHERE endTimestamp <= :currentTimeMs")
     suspend fun cleanupExpiredSessions(currentTimeMs: Long)
 }

@@ -24,11 +24,14 @@ class ScheduleEvaluatorTest {
         // Exact boundary start: 09:00 (540) -> Active
         assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 3, minuteOfDay = 540))
 
-        // Exact boundary end: 17:00 (1020) -> Active
-        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 3, minuteOfDay = 1020))
+        // Exact boundary end: 17:00 (1020) -> Inactive (end is exclusive, schedule ends at 17:00:00)
+        assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 3, minuteOfDay = 1020))
 
         // Before start: Wednesday 08:59 (539) -> Inactive
         assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 3, minuteOfDay = 539))
+
+        // Last minute before end: Wednesday 16:59 (1019) -> Active
+        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 3, minuteOfDay = 1019))
 
         // After end: Wednesday 17:01 (1021) -> Inactive
         assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 3, minuteOfDay = 1021))
@@ -103,9 +106,92 @@ class ScheduleEvaluatorTest {
         assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1170))
         // 8:45 PM (1245) -> Active
         assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1245))
-        // 10:00 PM (1320) -> Active
-        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1320))
+        // 9:59 PM (1319) -> Active
+        assertTrue(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1319))
+        // 10:00 PM (1320) -> Inactive (exact boundary end)
+        assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1320))
         // 10:01 PM (1321) -> Not active
         assertFalse(ScheduleEvaluator.isScheduleActive(schedule, isoDayOfWeek = 1, minuteOfDay = 1321))
+    }
+
+    @Test
+    fun getScheduleTimestamps_intraDaySchedule() {
+        val schedule = Schedule(
+            profileId = 1,
+            daysOfWeekMask = 127,
+            startMinuteOfDay = 540,  // 09:00 AM
+            endMinuteOfDay = 1020,  // 05:00 PM
+            isEnabled = true
+        )
+
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 12)
+            set(java.util.Calendar.MINUTE, 30)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+
+        val startMs = ScheduleEvaluator.getScheduleStartTimestampMs(schedule, cal)
+        val endMs = ScheduleEvaluator.getScheduleEndTimestampMs(schedule, cal)
+
+        val expectedStart = (cal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 9)
+            set(java.util.Calendar.MINUTE, 0)
+        }.timeInMillis
+
+        val expectedEnd = (cal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 17)
+            set(java.util.Calendar.MINUTE, 0)
+        }.timeInMillis
+
+        org.junit.Assert.assertEquals(expectedStart, startMs)
+        org.junit.Assert.assertEquals(expectedEnd, endMs)
+        assertTrue(endMs > startMs)
+        val remainingMs = endMs - cal.timeInMillis
+        org.junit.Assert.assertEquals(4 * 3600 * 1000L + 30 * 60 * 1000L, remainingMs)
+    }
+
+    @Test
+    fun getScheduleTimestamps_overnightSchedule() {
+        // 22:00 (1320) to 06:00 (360)
+        val schedule = Schedule(
+            profileId = 1,
+            daysOfWeekMask = 127,
+            startMinuteOfDay = 1320,
+            endMinuteOfDay = 360,
+            isEnabled = true
+        )
+
+        // Case A: 23:00 (11 PM) evening
+        val calEvening = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 23)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+
+        val startMsA = ScheduleEvaluator.getScheduleStartTimestampMs(schedule, calEvening)
+        val endMsA = ScheduleEvaluator.getScheduleEndTimestampMs(schedule, calEvening)
+
+        assertTrue("End must be after start", endMsA > startMsA)
+        assertTrue("End must be in the future", endMsA > calEvening.timeInMillis)
+        // Remaining should be exactly 7 hours
+        org.junit.Assert.assertEquals(7 * 3600 * 1000L, endMsA - calEvening.timeInMillis)
+
+        // Case B: 04:00 (4 AM) morning spillover
+        val calMorning = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 4)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+
+        val startMsB = ScheduleEvaluator.getScheduleStartTimestampMs(schedule, calMorning)
+        val endMsB = ScheduleEvaluator.getScheduleEndTimestampMs(schedule, calMorning)
+
+        assertTrue("End must be after start", endMsB > startMsB)
+        assertTrue("End must be in the future", endMsB > calMorning.timeInMillis)
+        // Remaining should be exactly 2 hours
+        org.junit.Assert.assertEquals(2 * 3600 * 1000L, endMsB - calMorning.timeInMillis)
     }
 }

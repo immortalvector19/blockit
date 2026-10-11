@@ -37,8 +37,9 @@ object ScheduleEvaluator {
         }
 
         // Intra-day schedule (e.g., 09:00 to 17:00)
+        // End minute is exclusive: at 17:00:00 (minute 1020), the schedule has ended.
         if (schedule.startMinuteOfDay <= schedule.endMinuteOfDay) {
-            return minuteOfDay in schedule.startMinuteOfDay..schedule.endMinuteOfDay
+            return minuteOfDay in schedule.startMinuteOfDay until schedule.endMinuteOfDay
         }
 
         // Overnight schedule on current day (e.g., 22:00 to 06:00)
@@ -64,5 +65,54 @@ object ScheduleEvaluator {
         }
         val currentMinute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
         return isScheduleActive(schedule, isoDay, currentMinute)
+    }
+
+    /**
+     * Calculates the exact end timestamp in milliseconds for an active schedule window.
+     * Accurately resolves intra-day and overnight midnight transitions.
+     */
+    fun getScheduleEndTimestampMs(schedule: Schedule, calendar: Calendar = Calendar.getInstance()): Long {
+        val currentMinute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+        val endCal = (calendar.clone() as Calendar).apply {
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        if (schedule.startMinuteOfDay <= schedule.endMinuteOfDay) {
+            endCal.set(Calendar.HOUR_OF_DAY, schedule.endMinuteOfDay / 60)
+            endCal.set(Calendar.MINUTE, schedule.endMinuteOfDay % 60)
+            return endCal.timeInMillis
+        } else {
+            if (currentMinute >= schedule.startMinuteOfDay) {
+                endCal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            endCal.set(Calendar.HOUR_OF_DAY, schedule.endMinuteOfDay / 60)
+            endCal.set(Calendar.MINUTE, schedule.endMinuteOfDay % 60)
+            return endCal.timeInMillis
+        }
+    }
+
+    /**
+     * Calculates the exact start timestamp in milliseconds for an active schedule window.
+     */
+    fun getScheduleStartTimestampMs(schedule: Schedule, calendar: Calendar = Calendar.getInstance()): Long {
+        val currentMinute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+        val startCal = (calendar.clone() as Calendar).apply {
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        if (schedule.startMinuteOfDay <= schedule.endMinuteOfDay) {
+            startCal.set(Calendar.HOUR_OF_DAY, schedule.startMinuteOfDay / 60)
+            startCal.set(Calendar.MINUTE, schedule.startMinuteOfDay % 60)
+            return startCal.timeInMillis
+        } else {
+            if (currentMinute < schedule.endMinuteOfDay) {
+                startCal.add(Calendar.DAY_OF_YEAR, -1)
+            }
+            startCal.set(Calendar.HOUR_OF_DAY, schedule.startMinuteOfDay / 60)
+            startCal.set(Calendar.MINUTE, schedule.startMinuteOfDay % 60)
+            return startCal.timeInMillis
+        }
     }
 }

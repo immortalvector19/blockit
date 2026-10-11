@@ -30,6 +30,7 @@ data class FocusColors(
     val onPrimary: Color = Color.White
 ) {
     val statusWarning: Color get() = if (isDark) WarningAmberDark else WarningAmber
+    val warning: Color get() = statusWarning
     val divider: Color get() = border
     val onAccent: Color get() = onPrimary
 

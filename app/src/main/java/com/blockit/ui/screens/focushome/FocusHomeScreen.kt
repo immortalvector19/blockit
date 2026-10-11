@@ -29,8 +29,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -38,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,8 +57,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.blockit.domain.model.BreakValidator
 import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.SessionStrictness
+import com.blockit.ui.components.BreakWarningCard
 import com.blockit.ui.components.FocusButton
 import com.blockit.ui.components.FocusDestructiveButton
 import com.blockit.ui.components.FocusMonolithMark
@@ -78,7 +84,11 @@ fun FocusHomeScreen(
     profileName: String,
     permittedPackages: Set<String>,
     strictness: SessionStrictness,
-    onStopSession: () -> Unit,
+    scheduleEndMs: Long? = null,
+    isBreakActive: Boolean = false,
+    breakExpiresAtMs: Long = 0L,
+    onGrantBreak: ((durationMinutes: Int) -> Unit)? = null,
+    onEndBreakEarly: (() -> Unit)? = null,
     onSessionExpired: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -109,14 +119,34 @@ fun FocusHomeScreen(
         }
     }
 
-    val remainingMs = remember(session, currentTimeMs) {
+    var frozenRemainingMsOnBreak by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(isBreakActive) {
+        if (isBreakActive) {
+            if (frozenRemainingMsOnBreak == null && session != null) {
+                val candidate = if (breakExpiresAtMs > 0L && session.endTimestamp > breakExpiresAtMs) {
+                    session.endTimestamp - breakExpiresAtMs
+                } else {
+                    (session.endTimestamp - currentTimeMs).coerceAtLeast(0L)
+                }
+                frozenRemainingMsOnBreak = candidate
+            }
+        } else {
+            frozenRemainingMsOnBreak = null
+        }
+    }
+
+    val remainingMs = remember(session, currentTimeMs, isBreakActive, frozenRemainingMsOnBreak) {
         if (session != null) {
-            (session.endTimestamp - currentTimeMs).coerceAtLeast(0L)
+            if (isBreakActive && frozenRemainingMsOnBreak != null) {
+                frozenRemainingMsOnBreak!!
+            } else {
+                (session.endTimestamp - currentTimeMs).coerceAtLeast(0L)
+            }
         } else 0L
     }
 
-    LaunchedEffect(hasEverObservedSession, session, remainingMs) {
-        if (hasEverObservedSession && session != null && remainingMs <= 0L) {
+    LaunchedEffect(hasEverObservedSession, session, remainingMs, isBreakActive) {
+        if (hasEverObservedSession && session != null && remainingMs <= 0L && !isBreakActive) {
             onSessionExpired()
         }
     }
@@ -139,7 +169,14 @@ fun FocusHomeScreen(
         String.format("%02d:%02d", remainingMinutes, remainingSeconds)
     }
 
-    var showStopDialog by remember { mutableStateOf(false) }
+    val breakRemainingMs = if (isBreakActive && breakExpiresAtMs > 0L) {
+        (breakExpiresAtMs - currentTimeMs).coerceAtLeast(0L)
+    } else 0L
+    val breakMin = (breakRemainingMs / (1000 * 60)) % 60
+    val breakSec = (breakRemainingMs / 1000) % 60
+    val breakTimerStr = String.format("%02d:%02d", breakMin, breakSec)
+
+    var showBreakDialog by remember { mutableStateOf(false) }
 
     // Load permitted app metadata asynchronously on IO dispatcher
     val permittedApps by androidx.compose.runtime.produceState<List<WhitelistAppInfo>>(
@@ -215,7 +252,7 @@ fun FocusHomeScreen(
                             progress = { progress },
                             modifier = Modifier.fillMaxSize(),
                             strokeWidth = 6.dp,
-                            color = colors.accent,
+                            color = if (isBreakActive) colors.warning else colors.accent,
                             trackColor = Color.Transparent
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -225,21 +262,39 @@ fun FocusHomeScreen(
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "remaining",
-                                style = FocusTypography.caption,
-                                color = colors.textSecondary
+                                text = if (isBreakActive) "PAUSED" else "remaining",
+                                style = FocusTypography.caption.copy(
+                                    fontWeight = if (isBreakActive) FontWeight.Bold else FontWeight.Normal
+                                ),
+                                color = if (isBreakActive) colors.warning else colors.textSecondary
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(FocusSpacing.sm))
 
-                    Text(
-                        text = "Allowlist lockdown active: only permitted apps are launchable.",
-                        style = FocusTypography.caption,
-                        color = colors.textSecondary,
-                        textAlign = TextAlign.Center
-                    )
+                    if (isBreakActive) {
+                        Surface(
+                            shape = FocusShapes.small,
+                            color = colors.accentContainer,
+                            modifier = Modifier.padding(top = FocusSpacing.xxs)
+                        ) {
+                            Text(
+                                text = "Break in progress: $breakTimerStr • Apps temporarily unlocked",
+                                style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
+                                color = colors.accent,
+                                modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = 4.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Allowlist lockdown active: only permitted apps are launchable.",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
 
@@ -304,68 +359,242 @@ fun FocusHomeScreen(
 
             Spacer(modifier = Modifier.height(FocusSpacing.md))
 
-            // Bottom Actions: Compact Round Call Button + Stop Session
+            // Bottom Actions: Emergency Phone Call + Circular Break Button
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = FocusSpacing.sm),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Compact round call button (phone icon, content description "Call")
-                Surface(
-                    onClick = {
-                        val dialerPkg = com.blockit.core.system.AndroidSystemAppResolver(context).getDefaultDialerPackage() ?: "com.android.dialer"
-                        com.blockit.core.engine.EngineLifecycleMonitor.markPermittedAppLaunched(dialerPkg)
-                        val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Emergency Phone Call Button (round 52dp button with phone icon)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(
+                        onClick = {
+                            val dialerPkg = com.blockit.core.system.AndroidSystemAppResolver(context).getDefaultDialerPackage() ?: "com.android.dialer"
+                            com.blockit.core.engine.EngineLifecycleMonitor.markPermittedAppLaunched(dialerPkg)
+                            val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(dialIntent)
+                        },
+                        shape = CircleShape,
+                        color = colors.surfaceVariant,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                        modifier = Modifier.size(52.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.Phone,
+                                contentDescription = "Emergency Call",
+                                tint = colors.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
-                        context.startActivity(dialIntent)
-                    },
-                    shape = CircleShape,
-                    color = colors.surfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.Phone,
-                            contentDescription = "Call",
-                            tint = colors.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Phone",
+                        style = FocusTypography.caption,
+                        color = colors.textSecondary
+                    )
                 }
 
-                // Stop Focus Session with friction
-                if (strictness == SessionStrictness.LOCKED) {
-                    FocusOutlinedButton(
-                        text = "Locked until timer expires",
-                        leadingIcon = Icons.Rounded.Lock,
-                        onClick = { showStopDialog = true },
-                        modifier = Modifier.weight(1f)
-                    )
+                Spacer(modifier = Modifier.width(36.dp))
+
+                if (isBreakActive) {
+                    // Resume button when on break (accent-filled 52dp circular button with play icon)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            onClick = {
+                                onEndBreakEarly?.invoke()
+                            },
+                            shape = CircleShape,
+                            color = colors.accent,
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PlayArrow,
+                                    contentDescription = "Resume Focus",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Resume",
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.accent
+                        )
+                    }
                 } else {
-                    FocusDestructiveButton(
-                        text = if (strictness == SessionStrictness.STRICT) "Stop focus (strict challenge)" else "Stop focus early",
-                        leadingIcon = Icons.Rounded.Stop,
-                        onClick = { showStopDialog = true },
-                        modifier = Modifier.weight(1f)
-                    )
+                    // Break button with the pause sign in a circle (round 52dp button with pause icon)
+                    val isBreakAllowed = strictness != SessionStrictness.LOCKED
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            onClick = {
+                                if (isBreakAllowed) {
+                                    showBreakDialog = true
+                                }
+                            },
+                            enabled = isBreakAllowed,
+                            shape = CircleShape,
+                            color = colors.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.5.dp,
+                                if (isBreakAllowed) colors.accent else colors.border
+                            ),
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isBreakAllowed) Icons.Rounded.Pause else Icons.Rounded.Lock,
+                                    contentDescription = "Break",
+                                    tint = if (isBreakAllowed) colors.accent else colors.textSecondary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Break",
+                            style = FocusTypography.caption,
+                            color = if (isBreakAllowed) colors.textSecondary else colors.border
+                        )
+                    }
                 }
             }
         }
     }
 
-    if (showStopDialog) {
-        StopSessionFrictionDialog(
-            strictness = strictness,
-            endTimeMs = session?.endTimestamp,
-            onDismiss = { showStopDialog = false },
-            onConfirmStop = {
-                showStopDialog = false
-                onStopSession()
+    if (showBreakDialog) {
+        BreakPickerDialog(
+            session = session,
+            remainingSessionMs = remainingMs,
+            scheduleEndMs = scheduleEndMs,
+            onDismiss = { showBreakDialog = false },
+            onConfirmBreak = { mins ->
+                showBreakDialog = false
+                onGrantBreak?.invoke(mins)
             }
         )
     }
+}
+
+@Composable
+fun BreakPickerDialog(
+    session: FocusSession?,
+    remainingSessionMs: Long,
+    scheduleEndMs: Long? = null,
+    onDismiss: () -> Unit,
+    onConfirmBreak: (Int) -> Unit
+) {
+    val colors = FocusTheme.colors
+    var selectedMinutes by remember { mutableIntStateOf(5) }
+    val choices = listOf(5, 10, 20)
+
+    val warningInfo = remember(selectedMinutes, remainingSessionMs, session, scheduleEndMs) {
+        BreakValidator.evaluate(
+            requestedMinutes = selectedMinutes,
+            remainingSessionMs = remainingSessionMs,
+            sessionEndMs = session?.endTimestamp ?: 0L,
+            scheduleEndMs = scheduleEndMs
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Take a Break",
+                style = FocusTypography.title,
+                color = colors.textPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)) {
+                Text(
+                    text = "Temporarily pause allowlist lockdown to use your phone. Choose break duration:",
+                    style = FocusTypography.body,
+                    color = colors.textSecondary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
+                ) {
+                    choices.forEach { mins ->
+                        val isSelected = selectedMinutes == mins
+                        Surface(
+                            onClick = { selectedMinutes = mins },
+                            shape = FocusShapes.small,
+                            color = if (isSelected) colors.accent else colors.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) colors.accent else colors.border
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = FocusSpacing.sm),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${mins} min",
+                                    style = FocusTypography.label,
+                                    color = if (isSelected) Color.White else colors.textPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (warningInfo.exceedsRemainingSession) {
+                    BreakWarningCard(
+                        warningInfo = warningInfo,
+                        selectedMinutes = selectedMinutes
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+            ) {
+                if (warningInfo.exceedsRemainingSession && warningInfo.cappedBreakMinutes in 1 until selectedMinutes) {
+                    FocusOutlinedButton(
+                        text = "Cap break to remaining (${warningInfo.cappedBreakMinutes} min)",
+                        onClick = {
+                            onConfirmBreak(warningInfo.cappedBreakMinutes)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                FocusButton(
+                    text = if (warningInfo.exceedsRemainingSession) {
+                        "Extend & start break ($selectedMinutes min)"
+                    } else {
+                        "Start break ($selectedMinutes min)"
+                    },
+                    onClick = {
+                        onConfirmBreak(selectedMinutes)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        dismissButton = {
+            FocusOutlinedButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        containerColor = colors.surface,
+        shape = FocusShapes.large
+    )
 }
 
 @Composable

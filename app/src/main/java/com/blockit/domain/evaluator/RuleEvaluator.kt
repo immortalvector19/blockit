@@ -5,6 +5,7 @@ import com.blockit.domain.matcher.DomainMatcher
 import com.blockit.domain.model.Schedule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -31,8 +32,35 @@ data class ActiveRuleSnapshot(
     val isScheduleActive: Boolean = false,
     val activeScheduleProfileName: String? = null,
     val activeScheduleProfileId: Long? = null,
-    val activeScheduleEndMinute: Int? = null
-)
+    val activeScheduleStartMinute: Int? = null,
+    val activeScheduleEndMinute: Int? = null,
+    val activeScheduleStartTimestampMs: Long? = null,
+    val activeScheduleEndTimestampMs: Long? = null,
+    val activeSessionEndTimestampMs: Long? = null
+) {
+    /**
+     * Determines whether the active whitelist rules have expired according to the wall clock.
+     * Prevents rapid restart / accessibility flicker loops after schedule or session deadline.
+     */
+    fun isWhitelistExpired(now: Long = System.currentTimeMillis()): Boolean {
+        if (!hasActiveWhitelist) return true
+        val sessionValid = activeSessionEndTimestampMs?.let { it > now } ?: false
+        val scheduleValid = if (isScheduleActive) {
+            activeScheduleEndTimestampMs?.let { it > now } ?: false
+        } else false
+
+        return !sessionValid && !scheduleValid && (activeSessionEndTimestampMs != null || activeScheduleEndTimestampMs != null)
+    }
+
+    /**
+     * Determines whether an active schedule ruleset has expired according to the wall clock.
+     */
+    fun isScheduleExpired(now: Long = System.currentTimeMillis()): Boolean {
+        if (!isScheduleActive) return true
+        val schedEnd = activeScheduleEndTimestampMs ?: return false
+        return now >= schedEnd
+    }
+}
 
 /**
  * High-speed, lock-free rule evaluation engine.
@@ -82,7 +110,10 @@ open class RuleEvaluator(
         var isAnyScheduleActive = false
         var activeSchedName: String? = null
         var activeSchedId: Long? = null
+        var activeSchedStartMin: Int? = null
         var activeSchedEndMin: Int? = null
+        var activeSchedStartMs: Long? = null
+        var activeSchedEndMs: Long? = null
 
         for (profile in profiles) {
             // Profile is active if it has an active focus session
@@ -93,24 +124,26 @@ open class RuleEvaluator(
 
             // Profile is active if its own schedule is currently active (Schedule Profile)
             if (profile.profileType == "SCHEDULE") {
-                val isSchedActive = ScheduleEvaluator.isScheduleActiveNow(
-                    Schedule(
-                        id = profile.id,
-                        profileId = profile.id,
-                        daysOfWeekMask = profile.scheduleDaysMask,
-                        startMinuteOfDay = profile.scheduleStartMinute,
-                        endMinuteOfDay = profile.scheduleEndMinute,
-                        isEnabled = profile.isEnabled
-                    ),
-                    calendar
+                val sched = Schedule(
+                    id = profile.id,
+                    profileId = profile.id,
+                    daysOfWeekMask = profile.scheduleDaysMask,
+                    startMinuteOfDay = profile.scheduleStartMinute,
+                    endMinuteOfDay = profile.scheduleEndMinute,
+                    isEnabled = profile.isEnabled
                 )
-                if (isSchedActive) {
+                val isSchedActive = ScheduleEvaluator.isScheduleActiveNow(sched, calendar)
+                val schedEndMs = ScheduleEvaluator.getScheduleEndTimestampMs(sched, calendar)
+                if (isSchedActive && now < schedEndMs) {
                     activeProfileIds.add(profile.id)
                     if (!isAnyScheduleActive) {
                         isAnyScheduleActive = true
                         activeSchedName = profile.name
                         activeSchedId = profile.id
+                        activeSchedStartMin = profile.scheduleStartMinute
                         activeSchedEndMin = profile.scheduleEndMinute
+                        activeSchedStartMs = ScheduleEvaluator.getScheduleStartTimestampMs(sched, calendar)
+                        activeSchedEndMs = schedEndMs
                     }
                     continue
                 }
@@ -120,25 +153,37 @@ open class RuleEvaluator(
             val schedules = schedulesByProfile[profile.id]
             if (schedules != null && schedules.isNotEmpty()) {
                 val activeEntity = schedules.firstOrNull { entity ->
-                    entity.isEnabled && ScheduleEvaluator.isScheduleActiveNow(
-                        Schedule(
-                            id = entity.id,
-                            profileId = entity.profileId,
-                            daysOfWeekMask = entity.daysOfWeekMask,
-                            startMinuteOfDay = entity.startMinuteOfDay,
-                            endMinuteOfDay = entity.endMinuteOfDay,
-                            isEnabled = entity.isEnabled
-                        ),
-                        calendar
+                    val s = Schedule(
+                        id = entity.id,
+                        profileId = entity.profileId,
+                        daysOfWeekMask = entity.daysOfWeekMask,
+                        startMinuteOfDay = entity.startMinuteOfDay,
+                        endMinuteOfDay = entity.endMinuteOfDay,
+                        isEnabled = entity.isEnabled
                     )
+                    entity.isEnabled &&
+                        ScheduleEvaluator.isScheduleActiveNow(s, calendar) &&
+                        now < ScheduleEvaluator.getScheduleEndTimestampMs(s, calendar)
                 }
                 if (activeEntity != null) {
+                    val sched = Schedule(
+                        id = activeEntity.id,
+                        profileId = activeEntity.profileId,
+                        daysOfWeekMask = activeEntity.daysOfWeekMask,
+                        startMinuteOfDay = activeEntity.startMinuteOfDay,
+                        endMinuteOfDay = activeEntity.endMinuteOfDay,
+                        isEnabled = activeEntity.isEnabled
+                    )
+                    val schedEndMs = ScheduleEvaluator.getScheduleEndTimestampMs(sched, calendar)
                     activeProfileIds.add(profile.id)
                     if (!isAnyScheduleActive) {
                         isAnyScheduleActive = true
                         activeSchedName = profile.name
                         activeSchedId = profile.id
+                        activeSchedStartMin = activeEntity.startMinuteOfDay
                         activeSchedEndMin = activeEntity.endMinuteOfDay
+                        activeSchedStartMs = ScheduleEvaluator.getScheduleStartTimestampMs(sched, calendar)
+                        activeSchedEndMs = schedEndMs
                     }
                 }
             }
@@ -189,7 +234,11 @@ open class RuleEvaluator(
             isScheduleActive = isAnyScheduleActive,
             activeScheduleProfileName = activeSchedName,
             activeScheduleProfileId = activeSchedId,
-            activeScheduleEndMinute = activeSchedEndMin
+            activeScheduleStartMinute = activeSchedStartMin,
+            activeScheduleEndMinute = activeSchedEndMin,
+            activeScheduleStartTimestampMs = activeSchedStartMs,
+            activeScheduleEndTimestampMs = activeSchedEndMs,
+            activeSessionEndTimestampMs = activeSessions.firstOrNull()?.endTimestamp
         )
         cachedSnapshot = newSnapshot
         _snapshotFlow.value = newSnapshot
@@ -210,6 +259,13 @@ open class RuleEvaluator(
         }
 
         val snapshot = cachedSnapshot
+        val now = System.currentTimeMillis()
+
+        // Wall-clock expiration bypass: if whitelist expired, immediately allow app and refresh rules
+        if (snapshot.hasActiveWhitelist && snapshot.isWhitelistExpired(now)) {
+            scope?.launch { refreshRules() }
+            return EvaluationResult(isBlocked = false)
+        }
 
         // Essential System apps (dialer, keyboard, system UI, permission dialog, FocusShield) are NEVER blocked.
         // In Whitelist mode, the third-party Home Launcher is NOT exempt!
@@ -230,6 +286,12 @@ open class RuleEvaluator(
                 isWhitelistBlock = true,
                 allowedApps = snapshot.whitelistPackages.toList()
             )
+        }
+
+        // Check if schedule blacklist has expired according to wall-clock time
+        if (snapshot.isScheduleActive && snapshot.isScheduleExpired(now) && snapshot.activeSessionEndTimestampMs == null) {
+            scope?.launch { refreshRules() }
+            return EvaluationResult(isBlocked = false)
         }
 
         // Blacklist mode: check if package is on the blocklist
@@ -254,6 +316,13 @@ open class RuleEvaluator(
         if (cleanHost.isBlank()) return EvaluationResult(isBlocked = false)
 
         val snapshot = cachedSnapshot
+        val now = System.currentTimeMillis()
+
+        // Wall-clock expiration bypass: if whitelist expired, immediately allow domain and refresh rules
+        if (snapshot.hasActiveWhitelist && snapshot.isWhitelistExpired(now)) {
+            scope?.launch { refreshRules() }
+            return EvaluationResult(isBlocked = false)
+        }
 
         // Whitelist mode: if active, ONLY explicitly whitelisted websites are allowed
         if (snapshot.hasActiveWhitelist) {
@@ -267,6 +336,12 @@ open class RuleEvaluator(
                     isWhitelistBlock = true
                 )
             }
+            return EvaluationResult(isBlocked = false)
+        }
+
+        // Check if schedule blacklist has expired according to wall-clock time
+        if (snapshot.isScheduleActive && snapshot.isScheduleExpired(now) && snapshot.activeSessionEndTimestampMs == null) {
+            scope?.launch { refreshRules() }
             return EvaluationResult(isBlocked = false)
         }
 

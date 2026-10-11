@@ -91,6 +91,25 @@ class AppContainer(private val context: Context) {
     }
 
     init {
+        // Connect intentPassManager break lifecycle to active focus sessions:
+        // 1. When a break starts, immediately extend session end time in SQLite by the break duration
+        //    so the session never expires or cleans up during the break!
+        intentPassManager.setOnBreakStartedListener { durationMinutes ->
+            val extensionMs = durationMinutes * 60 * 1000L
+            applicationScope.launch {
+                focusSessionManager.extendActiveSession(extensionMs)
+            }
+        }
+
+        // 2. If user ends the break early (resumes), adjust back any unused break time
+        intentPassManager.setOnBreakEndedEarlyListener { unusedBreakDurationMs ->
+            if (unusedBreakDurationMs > 0L) {
+                applicationScope.launch {
+                    focusSessionManager.extendActiveSession(-unusedBreakDurationMs)
+                }
+            }
+        }
+
         // Prime the rule evaluator cache and arm boundaries on startup
         applicationScope.launch {
             ruleEvaluator.refreshRules()

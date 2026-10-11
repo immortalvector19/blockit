@@ -920,20 +920,28 @@ private fun DashboardHomeContent(
     var showDurationSheet by rememberSaveable { mutableStateOf(false) }
     var showProfilePickerDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Live remaining time countdown for active session
-    val now = System.currentTimeMillis()
-    var remainingMs by remember(activeSession?.endTimestamp) {
-        mutableLongStateOf(
-            if (activeSession != null) (activeSession.endTimestamp - now).coerceAtLeast(0) else 0L
-        )
-    }
+    val context = LocalContext.current
+    val container = remember(context) { com.blockit.core.BlockItApplication.from(context) }
+    val isBreakActive by container.intentPassManager.isBreakActiveFlow.collectAsState()
+    val breakStartedAtMs = container.intentPassManager.getBreakStartedAtMs()
 
-    LaunchedEffect(activeSession?.endTimestamp) {
-        while (activeSession != null && remainingMs > 0) {
+    var currentTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
             delay(1000)
-            remainingMs = (activeSession.endTimestamp - System.currentTimeMillis()).coerceAtLeast(0)
+            currentTimeMs = System.currentTimeMillis()
         }
     }
+
+    val breakExpiresAtMs = container.intentPassManager.getBreakExpiresAtMs()
+
+    val remainingMs = if (activeSession != null) {
+        if (isBreakActive && breakExpiresAtMs > 0L) {
+            (activeSession.endTimestamp - breakExpiresAtMs).coerceAtLeast(0L)
+        } else {
+            (activeSession.endTimestamp - currentTimeMs).coerceAtLeast(0L)
+        }
+    } else 0L
 
     val targetProfile = profiles.find { it.id == (activeSession?.profileId ?: selectedProfileId) } ?: profiles.firstOrNull()
 
@@ -1054,7 +1062,8 @@ private fun DashboardHomeContent(
                 isWhitelist = targetProfile?.blockMode == BlockMode.WHITELIST || targetProfile?.listType == ListType.ALLOWLIST,
                 remainingSeconds = remainingSeconds,
                 totalSeconds = totalSeconds,
-                onStopClick = { onEndSession(activeSession.id) }
+                onStopClick = { onEndSession(activeSession.id) },
+                isPaused = isBreakActive
             )
         } else {
             if (ruleSnapshot.isScheduleActive) {
@@ -1076,12 +1085,12 @@ private fun DashboardHomeContent(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(colors.statusActive)
+                                    .background(if (isBreakActive) colors.warning else colors.statusActive)
                             )
                             Text(
-                                text = "Scheduled session active",
+                                text = if (isBreakActive) "Scheduled session (Paused for break)" else "Scheduled session active",
                                 style = FocusTypography.label,
-                                color = colors.accent
+                                color = if (isBreakActive) colors.warning else colors.accent
                             )
                         }
                         Spacer(modifier = Modifier.height(FocusSpacing.xs))
@@ -1096,6 +1105,47 @@ private fun DashboardHomeContent(
                             style = FocusTypography.bodySmall,
                             color = colors.textSecondary
                         )
+
+                        if (ruleSnapshot.activeScheduleEndTimestampMs != null) {
+                            val schedEnd = ruleSnapshot.activeScheduleEndTimestampMs
+                            val schedRemainingMs = if (isBreakActive && breakStartedAtMs > 0L) {
+                                (schedEnd - breakStartedAtMs).coerceAtLeast(0L)
+                            } else {
+                                (schedEnd - currentTimeMs).coerceAtLeast(0L)
+                            }
+                            val sRemSec = (schedRemainingMs / 1000) % 60
+                            val sRemMin = (schedRemainingMs / (1000 * 60)) % 60
+                            val sRemHr = schedRemainingMs / (1000 * 60 * 60)
+                            val sTimerStr = if (sRemHr > 0) {
+                                String.format("%d:%02d:%02d", sRemHr, sRemMin, sRemSec)
+                            } else {
+                                String.format("%02d:%02d", sRemMin, sRemSec)
+                            }
+                            Spacer(modifier = Modifier.height(FocusSpacing.sm))
+                            Surface(
+                                shape = FocusShapes.small,
+                                color = colors.surfaceVariant,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.HourglassTop,
+                                        contentDescription = null,
+                                        tint = if (isBreakActive) colors.warning else colors.accent,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = if (isBreakActive) "$sTimerStr (Paused)" else "$sTimerStr remaining",
+                                        style = FocusTypography.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                                        color = if (isBreakActive) colors.warning else colors.accent
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(FocusSpacing.md))

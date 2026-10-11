@@ -33,10 +33,15 @@ class FocusSessionManager(
     private val profDao: com.blockit.data.local.db.dao.ProfileDao =
         customProfileDao ?: requireNotNull(database) { "Database or customProfileDao must be provided" }.profileDao()
 
+    @Volatile
+    private var cachedActiveSession: FocusSession? = null
+
+    fun getCachedActiveSession(): FocusSession? = cachedActiveSession
+
     fun observeActiveSession(): Flow<FocusSession?> {
         val now = System.currentTimeMillis()
         return sessionDao.observeActiveSessions(now).map { list ->
-            list.firstOrNull()?.let {
+            val session = list.firstOrNull()?.let {
                 FocusSession(
                     id = it.id,
                     profileId = it.profileId,
@@ -45,6 +50,8 @@ class FocusSessionManager(
                     isActive = it.isActive
                 )
             }
+            cachedActiveSession = session
+            session
         }
     }
 
@@ -59,6 +66,14 @@ class FocusSessionManager(
             isActive = true
         )
         val id = sessionDao.insertSession(entity)
+        val newSession = FocusSession(
+            id = id,
+            profileId = profileId,
+            startTimestamp = now,
+            endTimestamp = end,
+            isActive = true
+        )
+        cachedActiveSession = newSession
         ruleEvaluator.refreshRules()
         scheduleManager?.scheduleNextBoundaryAlarm()
 
@@ -87,10 +102,38 @@ class FocusSessionManager(
     }
 
     suspend fun endSession(sessionId: Long) {
+        cachedActiveSession = null
         sessionDao.endSession(sessionId)
         ruleEvaluator.refreshRules()
         scheduleManager?.scheduleNextBoundaryAlarm()
         notificationManager?.cancelSessionNotification()
+    }
+
+    suspend fun extendActiveSession(extensionMs: Long) {
+        if (extensionMs == 0L) return
+        val now = System.currentTimeMillis()
+        val current = cachedActiveSession ?: sessionDao.getActiveSessions(now).firstOrNull()?.let {
+            FocusSession(
+                id = it.id,
+                profileId = it.profileId,
+                startTimestamp = it.startTimestamp,
+                endTimestamp = it.endTimestamp,
+                isActive = it.isActive
+            )
+        } ?: return
+
+        val newEndTimestamp = (current.endTimestamp + extensionMs).coerceAtLeast(now)
+        sessionDao.extendSessionEndTime(current.id, extensionMs)
+        val updated = current.copy(endTimestamp = newEndTimestamp)
+        cachedActiveSession = updated
+        ruleEvaluator.refreshRules()
+        scheduleManager?.scheduleNextBoundaryAlarm()
+
+        val profile = profDao.getProfileById(current.profileId)
+        notificationManager?.showSessionNotification(profile?.name ?: "Focus Session", newEndTimestamp)
+        try {
+            Log.i("FocusSessionManager", "Active session ${current.id} adjusted by ${extensionMs}ms (new end: $newEndTimestamp)")
+        } catch (_: Throwable) {}
     }
 
     suspend fun restoreActiveSessionNotification() {
@@ -138,12 +181,14 @@ class FocusSessionManager(
                 endTimestamp = active.endTimestamp,
                 isActive = active.isActive
             )
+            cachedActiveSession = sessionModel
             ReconcileBootResult(
                 hasActiveSession = true,
                 activeSession = sessionModel,
                 remainingTimeMs = remainingMs
             )
         } else {
+            cachedActiveSession = null
             notificationManager?.cancelSessionNotification()
             ReconcileBootResult(
                 hasActiveSession = false,

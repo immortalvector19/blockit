@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -35,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,7 +50,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.blockit.domain.model.BreakValidator
 import com.blockit.domain.model.SessionStrictness
+import com.blockit.ui.components.BreakWarningCard
 import com.blockit.ui.components.FocusButton
 import com.blockit.ui.components.FocusMonolithMark
 import com.blockit.ui.components.FocusOutlinedButton
@@ -68,6 +72,10 @@ fun BlockScreenContent(
     canRequestPause: Boolean = true,
     remainingPauses: Int = 3,
     maxPauses: Int = 3,
+    sessionEndMs: Long = 0L,
+    scheduleEndMs: Long? = null,
+    isBreakActive: Boolean = false,
+    breakExpiresAtMs: Long = 0L,
     onHomeClicked: () -> Unit,
     onGrantPause: ((durationMinutes: Int) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -76,10 +84,72 @@ fun BlockScreenContent(
     val targetAppName = remember(targetIdentifier) { getAppName(context, targetIdentifier) }
     val targetAppIcon = remember(targetIdentifier) { getAppIcon(context, targetIdentifier) }
 
-    // Pause Dialog / Sheet state
+    // Pause / Break Dialog state
     var isPausePickerOpen by remember { mutableStateOf(false) }
     var selectedMinutes by remember { mutableIntStateOf(5) }
-    val minuteChoices = listOf(1, 5, 10, 15)
+    val minuteChoices = listOf(5, 10, 20)
+
+    var currentTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            currentTimeMs = System.currentTimeMillis()
+        }
+    }
+
+    var frozenRemainingMsOnBreak by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(isBreakActive) {
+        if (isBreakActive) {
+            if (frozenRemainingMsOnBreak == null && sessionEndMs > 0L) {
+                val candidate = if (breakExpiresAtMs > 0L && sessionEndMs > breakExpiresAtMs) {
+                    sessionEndMs - breakExpiresAtMs
+                } else {
+                    (sessionEndMs - currentTimeMs).coerceAtLeast(0L)
+                }
+                frozenRemainingMsOnBreak = candidate
+            }
+        } else {
+            frozenRemainingMsOnBreak = null
+        }
+    }
+
+    val remainingSessionMs = if (sessionEndMs > 0L) {
+        if (isBreakActive && frozenRemainingMsOnBreak != null) {
+            frozenRemainingMsOnBreak!!
+        } else {
+            (sessionEndMs - currentTimeMs).coerceAtLeast(0L)
+        }
+    } else 0L
+
+    val sessionRemainingSeconds = (remainingSessionMs / 1000) % 60
+    val sessionRemainingMinutes = (remainingSessionMs / (1000 * 60)) % 60
+    val sessionRemainingHours = remainingSessionMs / (1000 * 60 * 60)
+
+    val sessionTimerText = if (sessionRemainingHours > 0) {
+        String.format("%d:%02d:%02d", sessionRemainingHours, sessionRemainingMinutes, sessionRemainingSeconds)
+    } else {
+        String.format("%02d:%02d", sessionRemainingMinutes, sessionRemainingSeconds)
+    }
+
+    val remainingBreakMs = if (isBreakActive && breakExpiresAtMs > 0L) {
+        (breakExpiresAtMs - currentTimeMs).coerceAtLeast(0L)
+    } else 0L
+    val breakRemainingSeconds = (remainingBreakMs / 1000) % 60
+    val breakRemainingMinutes = (remainingBreakMs / (1000 * 60)) % 60
+    val breakTimerText = String.format("%02d:%02d", breakRemainingMinutes, breakRemainingSeconds)
+
+    var hasObservedPositiveRemaining by remember(sessionEndMs) { mutableStateOf(false) }
+    LaunchedEffect(remainingSessionMs) {
+        if (remainingSessionMs > 0L) {
+            hasObservedPositiveRemaining = true
+        }
+    }
+
+    LaunchedEffect(sessionEndMs, remainingSessionMs, isBreakActive, hasObservedPositiveRemaining) {
+        if (sessionEndMs > 0L && hasObservedPositiveRemaining && remainingSessionMs <= 0L && !isBreakActive) {
+            onHomeClicked()
+        }
+    }
 
     // Strict Challenge State for Pause
     val isStrict = strictness == SessionStrictness.STRICT
@@ -142,6 +212,33 @@ fun BlockScreenContent(
                             style = FocusTypography.label,
                             color = colors.textPrimary
                         )
+                    }
+                }
+
+                if (sessionEndMs > 0L) {
+                    Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                    Surface(
+                        shape = FocusShapes.small,
+                        color = colors.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = FocusSpacing.sm, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.HourglassTop,
+                                contentDescription = null,
+                                tint = if (isBreakActive) colors.warning else colors.accent,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = if (isBreakActive) "Break: $breakTimerText (Focus paused at $sessionTimerText)" else "$sessionTimerText remaining",
+                                style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (isBreakActive) colors.warning else colors.accent
+                            )
+                        }
                     }
                 }
 
@@ -216,7 +313,7 @@ fun BlockScreenContent(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Take a temporary pause",
+                                text = "Take a temporary break",
                                 style = FocusTypography.title,
                                 color = colors.textPrimary
                             )
@@ -224,7 +321,7 @@ fun BlockScreenContent(
                             Spacer(modifier = Modifier.height(FocusSpacing.xxs))
 
                             Text(
-                                text = "$remainingPauses of $maxPauses pauses remaining in this session",
+                                text = "$remainingPauses of $maxPauses breaks remaining in this session",
                                 style = FocusTypography.caption,
                                 color = colors.textSecondary
                             )
@@ -262,6 +359,23 @@ fun BlockScreenContent(
                                 }
                             }
 
+                            val warningInfo = remember(selectedMinutes, remainingSessionMs, sessionEndMs, scheduleEndMs) {
+                                BreakValidator.evaluate(
+                                    requestedMinutes = selectedMinutes,
+                                    remainingSessionMs = remainingSessionMs,
+                                    sessionEndMs = sessionEndMs,
+                                    scheduleEndMs = scheduleEndMs
+                                )
+                            }
+
+                            if (warningInfo.exceedsRemainingSession) {
+                                Spacer(modifier = Modifier.height(FocusSpacing.sm))
+                                BreakWarningCard(
+                                    warningInfo = warningInfo,
+                                    selectedMinutes = selectedMinutes
+                                )
+                            }
+
                             if (isStrict) {
                                 Spacer(modifier = Modifier.height(FocusSpacing.md))
 
@@ -297,6 +411,20 @@ fun BlockScreenContent(
 
                             Spacer(modifier = Modifier.height(FocusSpacing.lg))
 
+                            if (warningInfo.exceedsRemainingSession && warningInfo.cappedBreakMinutes in 1 until selectedMinutes) {
+                                FocusOutlinedButton(
+                                    text = "Cap break to remaining (${warningInfo.cappedBreakMinutes} min)",
+                                    onClick = {
+                                        if (canConfirmPause && onGrantPause != null) {
+                                            onGrantPause(warningInfo.cappedBreakMinutes)
+                                        }
+                                    },
+                                    enabled = canConfirmPause,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                            }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(FocusSpacing.sm)
@@ -310,8 +438,10 @@ fun BlockScreenContent(
                                 FocusButton(
                                     text = if (isStrict && strictCooldownSeconds > 0) {
                                         "${strictCooldownSeconds}s"
+                                    } else if (warningInfo.exceedsRemainingSession) {
+                                        "Extend & start break ($selectedMinutes min)"
                                     } else {
-                                        "Confirm ($selectedMinutes min)"
+                                        "Start break ($selectedMinutes min)"
                                     },
                                     onClick = {
                                         if (canConfirmPause && onGrantPause != null) {
@@ -327,39 +457,68 @@ fun BlockScreenContent(
                 }
             }
 
-            // Bottom Actions: "Go home" and "Pause"
+            // Bottom Actions: "Go home" and circular Break button
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = FocusSpacing.xl),
-                verticalArrangement = Arrangement.spacedBy(FocusSpacing.sm),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Primary Action 1: "Go home"
-                FocusButton(
-                    text = "Go home",
-                    leadingIcon = Icons.Rounded.Home,
-                    onClick = onHomeClicked,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Primary Action 2: "Pause" button
                 if (!isPausePickerOpen) {
-                    val pauseButtonText = when {
-                        isLocked -> "Pauses disabled in locked mode"
-                        remainingPauses <= 0 -> "No pauses remaining"
-                        else -> "Pause"
-                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FocusButton(
+                            text = "Go home",
+                            leadingIcon = Icons.Rounded.Home,
+                            onClick = onHomeClicked,
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    FocusOutlinedButton(
-                        text = pauseButtonText,
-                        leadingIcon = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.Pause,
-                        onClick = {
-                            if (!isLocked && remainingPauses > 0) {
-                                isPausePickerOpen = true
+                        // Circular Break button with pause sign in a circle
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            val isBreakEnabled = !isLocked && remainingPauses > 0
+                            Surface(
+                                onClick = {
+                                    if (isBreakEnabled) {
+                                        isPausePickerOpen = true
+                                    }
+                                },
+                                enabled = isBreakEnabled,
+                                shape = CircleShape,
+                                color = colors.surfaceVariant,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.5.dp,
+                                    if (isBreakEnabled) colors.accent else colors.border
+                                ),
+                                modifier = Modifier.size(52.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.Pause,
+                                        contentDescription = "Break",
+                                        tint = if (isBreakEnabled) colors.accent else colors.textSecondary,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
                             }
-                        },
-                        enabled = !isLocked && remainingPauses > 0,
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Break",
+                                style = FocusTypography.caption,
+                                color = if (isBreakEnabled) colors.textSecondary else colors.border
+                            )
+                        }
+                    }
+                } else {
+                    FocusButton(
+                        text = "Go home",
+                        leadingIcon = Icons.Rounded.Home,
+                        onClick = onHomeClicked,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

@@ -56,6 +56,15 @@ class FocusSessionRebootTest {
             }
         }
 
+        override suspend fun extendSessionEndTime(sessionId: Long, extensionMs: Long) {
+            val idx = persistentSessions.indexOfFirst { it.id == sessionId }
+            if (idx >= 0) {
+                persistentSessions[idx] = persistentSessions[idx].copy(
+                    endTimestamp = persistentSessions[idx].endTimestamp + extensionMs
+                )
+            }
+        }
+
         override suspend fun cleanupExpiredSessions(currentTimeMs: Long) {
             for (i in persistentSessions.indices) {
                 if (persistentSessions[i].endTimestamp <= currentTimeMs) {
@@ -162,8 +171,111 @@ class FocusSessionRebootTest {
         assertEquals(0L, result.remainingTimeMs)
 
         // Verify the database record was updated so isActive = false
-        val allSessions = fakeFocusSessionDao.observeAllSessions()
         assertFalse(persistentSessions.first().isActive)
         assertEquals(1, rulesRefreshCount) // Rules refreshed to clear blockers
+    }
+
+    @Test
+    fun extendActiveSession_extendsEndTimestamp_andPreservesActiveRemainingDuration() = runTest {
+        val t0 = System.currentTimeMillis()
+        val duration15MinMs = 15 * 60 * 1000L
+        val tEnd = t0 + duration15MinMs
+
+        fakeFocusSessionDao.insertSession(
+            FocusSessionEntity(
+                id = 201L,
+                profileId = 1L,
+                startTimestamp = t0,
+                endTimestamp = tEnd,
+                isActive = true
+            )
+        )
+
+        val beforeRefreshCount = rulesRefreshCount
+        val beforeAlarmCount = alarmScheduleCount
+
+        // User takes a 5-minute break (300,000 ms)
+        val breakDurationMs = 5 * 60 * 1000L
+        sessionManager.extendActiveSession(breakDurationMs)
+
+        // Verify end timestamp in SQLite database was shifted forward by exactly breakDurationMs
+        val updatedSession = persistentSessions.first { it.id == 201L }
+        assertEquals(tEnd + breakDurationMs, updatedSession.endTimestamp)
+        assertEquals(tEnd + breakDurationMs, sessionManager.getCachedActiveSession()?.endTimestamp)
+
+        // Verify rule evaluator and alarms were refreshed for the new boundary
+        assertTrue(rulesRefreshCount > beforeRefreshCount)
+        assertTrue(alarmScheduleCount > beforeAlarmCount)
+    }
+
+    @Test
+    fun breakExtension_doesNotMutateProfileConfigurations() = runTest {
+        val originalProfile = ProfileEntity(
+            id = 1L,
+            name = "Work Hours",
+            colorHex = 0xFF2563EBL,
+            iconKey = "work",
+            isEnabled = true,
+            blockMode = "WHITELIST",
+            profileType = "SCHEDULE",
+            listType = "ALLOWLIST",
+            scheduleDaysMask = 31,
+            scheduleStartMinute = 540,
+            scheduleEndMinute = 1020,
+            createdAt = 1000L
+        )
+
+        // Active session started under this profile
+        val t0 = 1_000_000L
+        val tEnd = t0 + (30 * 60 * 1000L)
+        fakeFocusSessionDao.insertSession(
+            FocusSessionEntity(
+                id = 301L,
+                profileId = 1L,
+                startTimestamp = t0,
+                endTimestamp = tEnd,
+                isActive = true
+            )
+        )
+
+        // Break occurs
+        sessionManager.extendActiveSession(10 * 60 * 1000L)
+
+        // Verify profile entity configuration was NOT altered
+        assertEquals(31, originalProfile.scheduleDaysMask)
+        assertEquals(540, originalProfile.scheduleStartMinute)
+        assertEquals(1020, originalProfile.scheduleEndMinute)
+        assertEquals("ALLOWLIST", originalProfile.listType)
+        assertEquals("SCHEDULE", originalProfile.profileType)
+    }
+
+    @Test
+    fun breakEarlyResume_adjustsEndTimestampCorrectly_andPreservesProfile() = runTest {
+        val t0 = System.currentTimeMillis()
+        val originalEnd = t0 + (20 * 60 * 1000L) // 20 minutes session
+
+        fakeFocusSessionDao.insertSession(
+            FocusSessionEntity(
+                id = 401L,
+                profileId = 1L,
+                startTimestamp = t0,
+                endTimestamp = originalEnd,
+                isActive = true
+            )
+        )
+
+        // 1. Break starts: 10 minutes granted
+        val plannedBreakMs = 10 * 60 * 1000L
+        sessionManager.extendActiveSession(plannedBreakMs)
+        assertEquals(originalEnd + plannedBreakMs, persistentSessions.first { it.id == 401L }.endTimestamp)
+
+        // 2. User resumes early after 3 minutes: unused break is 7 minutes (420,000 ms)
+        val unusedBreakMs = 7 * 60 * 1000L
+        sessionManager.extendActiveSession(-unusedBreakMs)
+
+        // End timestamp should now be exactly originalEnd + 3 minutes!
+        val finalEnd = persistentSessions.first { it.id == 401L }.endTimestamp
+        assertEquals(originalEnd + (3 * 60 * 1000L), finalEnd)
+        assertEquals(finalEnd, sessionManager.getCachedActiveSession()?.endTimestamp)
     }
 }

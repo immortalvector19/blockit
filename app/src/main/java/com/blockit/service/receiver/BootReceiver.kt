@@ -22,7 +22,8 @@ class BootReceiver : BroadcastReceiver() {
                 val reconcileResult = container.focusSessionManager.reconcileSessionOnBoot(now)
 
                 val snapshot = container.ruleEvaluator.getSnapshot()
-                if (snapshot.hasActiveWhitelist && reconcileResult.hasActiveSession) {
+                val isWhitelistValid = snapshot.hasActiveWhitelist && !snapshot.isWhitelistExpired(now)
+                if (isWhitelistValid && (reconcileResult.hasActiveSession || snapshot.isScheduleActive)) {
                     val homeIntent = Intent(context, com.blockit.ui.screens.focushome.FocusHomeActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }

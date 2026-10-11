@@ -268,4 +268,93 @@ class RuleEvaluatorTest {
         assertTrue("Unauthorized app must be blocked in whitelist mode", distractionRes.isBlocked)
         assertTrue(distractionRes.isWhitelistBlock)
     }
+
+    @Test
+    fun isAppBlocked_whenActiveWhitelistScheduleHasExpired_doesNotBlockApp() {
+        val now = System.currentTimeMillis()
+        evaluator.setSnapshot(
+            ActiveRuleSnapshot(
+                hasActiveWhitelist = true,
+                whitelistProfileName = "Work Allowlist Schedule",
+                whitelistPackages = setOf("com.work.email"),
+                isScheduleActive = true,
+                activeScheduleEndTimestampMs = now - 5000L // Expired 5 seconds ago!
+            )
+        )
+
+        // Non-whitelisted app and launcher MUST NOT be blocked once schedule end has passed
+        val unpermittedApp = evaluator.isAppBlocked("com.twitter.android")
+        assertFalse("App must not be blocked after schedule has expired in wall-clock time", unpermittedApp.isBlocked)
+
+        val launcherResult = evaluator.isAppBlocked("com.android.launcher3")
+        assertFalse("Launcher must not be blocked after schedule has expired in wall-clock time", launcherResult.isBlocked)
+    }
+
+    @Test
+    fun isAppBlocked_whenActiveWhitelistSessionHasExpired_doesNotBlockApp() {
+        val now = System.currentTimeMillis()
+        evaluator.setSnapshot(
+            ActiveRuleSnapshot(
+                hasActiveWhitelist = true,
+                whitelistProfileName = "Quick Focus",
+                whitelistPackages = setOf("com.work.email"),
+                activeSessionEndTimestampMs = now - 2000L // Expired 2 seconds ago!
+            )
+        )
+
+        val unpermittedApp = evaluator.isAppBlocked("com.twitter.android")
+        assertFalse("App must not be blocked after focus session has expired", unpermittedApp.isBlocked)
+    }
+
+    @Test
+    fun isDomainBlocked_whenActiveWhitelistScheduleHasExpired_doesNotBlockDomain() {
+        val now = System.currentTimeMillis()
+        evaluator.setSnapshot(
+            ActiveRuleSnapshot(
+                hasActiveWhitelist = true,
+                whitelistProfileName = "Study Web",
+                whitelistDomains = setOf("wikipedia.org"),
+                isScheduleActive = true,
+                activeScheduleEndTimestampMs = now - 1000L
+            )
+        )
+
+        val unpermittedDomain = evaluator.isDomainBlocked("https://youtube.com")
+        assertFalse("Web domain must not be blocked after whitelist schedule has expired", unpermittedDomain.isBlocked)
+    }
+
+    @Test
+    fun isWhitelistExpired_accuratelyValidatesTimestampLifecycles() {
+        val now = 1_000_000L
+
+        // Active session in future -> NOT expired
+        val activeSessionSnapshot = ActiveRuleSnapshot(
+            hasActiveWhitelist = true,
+            activeSessionEndTimestampMs = now + 60_000L
+        )
+        assertFalse(activeSessionSnapshot.isWhitelistExpired(now))
+
+        // Expired session in past -> EXPIRED
+        val expiredSessionSnapshot = ActiveRuleSnapshot(
+            hasActiveWhitelist = true,
+            activeSessionEndTimestampMs = now - 1000L
+        )
+        assertTrue(expiredSessionSnapshot.isWhitelistExpired(now))
+
+        // Active schedule in future -> NOT expired
+        val activeScheduleSnapshot = ActiveRuleSnapshot(
+            hasActiveWhitelist = true,
+            isScheduleActive = true,
+            activeScheduleEndTimestampMs = now + 300_000L
+        )
+        assertFalse(activeScheduleSnapshot.isWhitelistExpired(now))
+
+        // Expired schedule in past -> EXPIRED
+        val expiredScheduleSnapshot = ActiveRuleSnapshot(
+            hasActiveWhitelist = true,
+            isScheduleActive = true,
+            activeScheduleEndTimestampMs = now - 500L
+        )
+        assertTrue(expiredScheduleSnapshot.isWhitelistExpired(now))
+    }
 }

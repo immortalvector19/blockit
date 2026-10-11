@@ -305,6 +305,8 @@ class OverlayController(private val context: Context) {
     }
 
     fun isOverlayShowing(): Boolean = isShowing
+
+    fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(context)
 }
 
 @Composable
@@ -325,6 +327,12 @@ fun PauseCountdownPill(
     val mins = remainingSec / 60
     val secs = remainingSec % 60
     val timerStr = String.format("%02d:%02d", mins, secs)
+
+    LaunchedEffect(remainingSec) {
+        if (remainingSec <= 0L) {
+            onEndEarly()
+        }
+    }
 
     Surface(
         color = Color(0xF00F172A),

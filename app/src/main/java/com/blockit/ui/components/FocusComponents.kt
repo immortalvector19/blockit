@@ -517,7 +517,8 @@ fun FocusActiveSessionCard(
     remainingSeconds: Long,
     totalSeconds: Long,
     onStopClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPaused: Boolean = false
 ) {
     val colors = FocusTheme.colors
     val hours = remainingSeconds / 3600
@@ -567,12 +568,12 @@ fun FocusActiveSessionCard(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(colors.statusActive)
+                            .background(if (isPaused) colors.warning else colors.statusActive)
                     )
                     Text(
-                        text = "Active session",
+                        text = if (isPaused) "Paused (Break)" else "Active session",
                         style = FocusTypography.label,
-                        color = colors.statusActive
+                        color = if (isPaused) colors.warning else colors.statusActive
                     )
                 }
 
@@ -616,16 +617,25 @@ fun FocusActiveSessionCard(
                 CircularProgressIndicator(
                     progress = { animatedProgress },
                     modifier = Modifier.size(160.dp),
-                    color = colors.accent,
+                    color = if (isPaused) colors.warning else colors.accent,
                     strokeWidth = 6.dp,
                     trackColor = Color.Transparent
                 )
 
-                Text(
-                    text = timeString,
-                    style = FocusTypography.display,
-                    color = colors.textPrimary
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = timeString,
+                        style = FocusTypography.display,
+                        color = colors.textPrimary
+                    )
+                    if (isPaused) {
+                        Text(
+                            text = "PAUSED",
+                            style = FocusTypography.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                            color = colors.warning
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(FocusSpacing.xl))
