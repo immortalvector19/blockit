@@ -13,3 +13,7 @@ build/
 *.apk
 scratch/
 *.xml
+artemis*
+*.mp4
+*.zip
+mcp_recommended_servers.json

@@ -125,7 +125,8 @@ fun BlockItNavHost(
                     container.focusSessionManager,
                     container.scheduleManager,
                     container.usageInsightsRepository,
-                    container.preferenceManager
+                    container.preferenceManager,
+                    container.focusGoalRepository
                 )
             )
             MainDashboardScreen(

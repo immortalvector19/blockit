@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,12 +24,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,14 +57,19 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.blockit.core.overlay.OverlayImageManager
 import com.blockit.domain.model.BreakValidator
+import com.blockit.domain.model.FocusGoal
+import com.blockit.domain.model.OverlayBackgroundType
 import com.blockit.domain.model.SessionStrictness
 import com.blockit.ui.components.BreakWarningCard
 import com.blockit.ui.components.FocusButton
 import com.blockit.ui.components.FocusMonolithMark
 import com.blockit.ui.components.FocusOutlinedButton
+import com.blockit.ui.components.OverlayBackgroundView
 import com.blockit.ui.theme.FocusShapes
 import com.blockit.ui.theme.FocusSpacing
 import com.blockit.ui.theme.FocusTheme
@@ -76,6 +90,12 @@ fun BlockScreenContent(
     scheduleEndMs: Long? = null,
     isBreakActive: Boolean = false,
     breakExpiresAtMs: Long = 0L,
+    overlayBackgroundType: OverlayBackgroundType = OverlayBackgroundType.DEFAULT,
+    overlayImageUris: List<String> = emptyList(),
+    overlayCustomText: String? = null,
+    goals: List<FocusGoal> = emptyList(),
+    onToggleGoal: ((Long, Boolean) -> Unit)? = null,
+    onAddGoal: ((String) -> Unit)? = null,
     onHomeClicked: () -> Unit,
     onGrantPause: ((durationMinutes: Int) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -83,6 +103,17 @@ fun BlockScreenContent(
     val context = LocalContext.current
     val targetAppName = remember(targetIdentifier) { getAppName(context, targetIdentifier) }
     val targetAppIcon = remember(targetIdentifier) { getAppIcon(context, targetIdentifier) }
+
+    val overlayBitmaps by androidx.compose.runtime.produceState<List<androidx.compose.ui.graphics.ImageBitmap?>>(
+        initialValue = emptyList(),
+        key1 = overlayImageUris
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            overlayImageUris.map { path ->
+                if (path.isNotBlank()) OverlayImageManager.loadBitmap(path) else null
+            }
+        }
+    }
 
     // Pause / Break Dialog state
     var isPausePickerOpen by remember { mutableStateOf(false) }
@@ -176,10 +207,14 @@ fun BlockScreenContent(
 
     val colors = FocusTheme.colors
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = colors.background
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
+        // Dynamic Overlay Background (Single photo, 4-photo collage, or default theme)
+        OverlayBackgroundView(
+            backgroundType = overlayBackgroundType,
+            bitmaps = overlayBitmaps,
+            modifier = Modifier.fillMaxSize()
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -195,7 +230,7 @@ fun BlockScreenContent(
                 // Top Status Tag
                 Surface(
                     shape = FocusShapes.small,
-                    color = colors.surfaceVariant,
+                    color = colors.surfaceVariant.copy(alpha = 0.92f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                 ) {
                     Row(
@@ -219,7 +254,7 @@ fun BlockScreenContent(
                     Spacer(modifier = Modifier.height(FocusSpacing.xs))
                     Surface(
                         shape = FocusShapes.small,
-                        color = colors.surface,
+                        color = colors.surface.copy(alpha = 0.92f),
                         border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                     ) {
                         Row(
@@ -242,7 +277,45 @@ fun BlockScreenContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(FocusSpacing.xxl))
+                // Motivational Mantra / Quote Card ("Text over the text")
+                if (!overlayCustomText.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(FocusSpacing.md))
+                    Surface(
+                        shape = FocusShapes.medium,
+                        color = Color.Black.copy(alpha = 0.60f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = FocusSpacing.sm)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = FocusSpacing.md, vertical = FocusSpacing.sm),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "“$overlayCustomText”",
+                                style = FocusTypography.bodyMedium.copy(
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                // Focus Goals & Achievements Interactive Card
+                Spacer(modifier = Modifier.height(FocusSpacing.md))
+                OverlayGoalsCard(
+                    goals = goals,
+                    onToggleGoal = onToggleGoal,
+                    onAddGoal = onAddGoal,
+                    isCustomBackground = overlayBackgroundType != OverlayBackgroundType.DEFAULT,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = FocusSpacing.sm)
+                )
+
+                Spacer(modifier = Modifier.height(FocusSpacing.xl))
 
                 // App Icon Box
                 Box(
@@ -551,5 +624,233 @@ private fun getAppIcon(context: Context, packageName: String): androidx.compose.
         bitmap.asImageBitmap()
     } catch (_: Exception) {
         null
+    }
+}
+
+@Composable
+private fun OverlayGoalsCard(
+    goals: List<FocusGoal>,
+    onToggleGoal: ((Long, Boolean) -> Unit)?,
+    onAddGoal: ((String) -> Unit)?,
+    isCustomBackground: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colors = FocusTheme.colors
+    var isAddingGoal by remember { mutableStateOf(false) }
+    var newGoalText by remember { mutableStateOf("") }
+
+    val completedCount = goals.count { it.isCompleted }
+    val totalCount = goals.size
+    val progress = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+    val allCompleted = totalCount > 0 && completedCount == totalCount
+
+    Surface(
+        shape = FocusShapes.medium,
+        color = if (isCustomBackground) Color.Black.copy(alpha = 0.65f) else colors.surface.copy(alpha = 0.95f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isCustomBackground) Color.White.copy(alpha = 0.22f) else colors.border
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(FocusSpacing.md)
+        ) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.EmojiEvents,
+                        contentDescription = null,
+                        tint = if (allCompleted) WarningAmber else colors.accent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Focus Goals & Achievements",
+                        style = FocusTypography.label.copy(fontWeight = FontWeight.Bold),
+                        color = if (isCustomBackground) Color.White else colors.textPrimary
+                    )
+                }
+
+                if (totalCount > 0) {
+                    Surface(
+                        shape = FocusShapes.small,
+                        color = if (allCompleted) WarningAmber.copy(alpha = 0.2f) else colors.surfaceVariant,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (allCompleted) WarningAmber else colors.border
+                        )
+                    ) {
+                        Text(
+                            text = if (allCompleted) "All goals completed" else "$completedCount/$totalCount",
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.Bold),
+                            color = if (allCompleted) WarningAmber else (if (isCustomBackground) Color.White else colors.textPrimary),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // Progress bar if goals exist
+            if (totalCount > 0) {
+                Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(CircleShape),
+                    color = if (allCompleted) WarningAmber else colors.accent,
+                    trackColor = if (isCustomBackground) Color.White.copy(alpha = 0.2f) else colors.border
+                )
+            }
+
+            Spacer(modifier = Modifier.height(FocusSpacing.sm))
+
+            if (goals.isEmpty()) {
+                Text(
+                    text = "No focus goals set for today yet.",
+                    style = FocusTypography.caption,
+                    color = if (isCustomBackground) Color.White.copy(alpha = 0.7f) else colors.textSecondary,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    goals.forEach { goal ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(FocusShapes.small)
+                                .clickable {
+                                    onToggleGoal?.invoke(goal.id, !goal.isCompleted)
+                                }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (goal.isCompleted) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                contentDescription = if (goal.isCompleted) "Completed" else "Incomplete",
+                                tint = if (goal.isCompleted) {
+                                    colors.accent
+                                } else {
+                                    if (isCustomBackground) Color.White.copy(alpha = 0.6f) else colors.textTertiary
+                                },
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = goal.title,
+                                style = FocusTypography.bodySmall.copy(
+                                    textDecoration = if (goal.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                    fontWeight = if (goal.isCompleted) FontWeight.Normal else FontWeight.Medium
+                                ),
+                                color = if (goal.isCompleted) {
+                                    if (isCustomBackground) Color.White.copy(alpha = 0.5f) else colors.textTertiary
+                                } else {
+                                    if (isCustomBackground) Color.White else colors.textPrimary
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Quick Add Goal Input
+            if (onAddGoal != null) {
+                Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                if (isAddingGoal) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                    ) {
+                        OutlinedTextField(
+                            value = newGoalText,
+                            onValueChange = { newGoalText = it },
+                            placeholder = {
+                                Text(
+                                    "New goal...",
+                                    style = FocusTypography.caption,
+                                    color = if (isCustomBackground) Color.White.copy(alpha = 0.6f) else colors.textTertiary
+                                )
+                            },
+                            textStyle = FocusTypography.bodySmall.copy(
+                                color = if (isCustomBackground) Color.White else colors.textPrimary
+                            ),
+                            singleLine = true,
+                            shape = FocusShapes.small,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = {
+                                if (newGoalText.isNotBlank()) {
+                                    onAddGoal(newGoalText.trim())
+                                    newGoalText = ""
+                                    isAddingGoal = false
+                                }
+                            },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(FocusShapes.small)
+                                .background(colors.accent)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = "Save Goal",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                isAddingGoal = false
+                                newGoalText = ""
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Cancel",
+                                tint = if (isCustomBackground) Color.White.copy(alpha = 0.7f) else colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .clip(FocusShapes.small)
+                            .clickable { isAddingGoal = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Add goal",
+                            style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.accent
+                        )
+                    }
+                }
+            }
+        }
     }
 }

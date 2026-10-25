@@ -78,6 +78,80 @@ class ProfileDetailViewModel(
         }
     }
 
+    fun setOverlayBackgroundType(type: com.blockit.domain.model.OverlayBackgroundType) {
+        val current = _profile.value ?: return
+        viewModelScope.launch {
+            repository.updateOverlayCustomization(
+                profileId = profileId,
+                backgroundType = type,
+                imageUris = current.overlayImageUris,
+                customText = current.overlayCustomText
+            )
+            loadProfile()
+        }
+    }
+
+    fun setOverlayCustomText(text: String?) {
+        val current = _profile.value ?: return
+        viewModelScope.launch {
+            repository.updateOverlayCustomization(
+                profileId = profileId,
+                backgroundType = current.overlayBackgroundType,
+                imageUris = current.overlayImageUris,
+                customText = text
+            )
+            loadProfile()
+        }
+    }
+
+    fun updateOverlayImage(slotIndex: Int, filePath: String) {
+        val current = _profile.value ?: return
+        val currentUris = current.overlayImageUris.toMutableList()
+        while (currentUris.size <= slotIndex) {
+            currentUris.add("")
+        }
+        currentUris[slotIndex] = filePath
+        viewModelScope.launch {
+            repository.updateOverlayCustomization(
+                profileId = profileId,
+                backgroundType = current.overlayBackgroundType,
+                imageUris = currentUris,
+                customText = current.overlayCustomText
+            )
+            loadProfile()
+        }
+    }
+
+    fun removeOverlayImage(slotIndex: Int) {
+        val current = _profile.value ?: return
+        val currentUris = current.overlayImageUris.toMutableList()
+        if (slotIndex in currentUris.indices) {
+            currentUris[slotIndex] = ""
+        }
+        viewModelScope.launch {
+            repository.updateOverlayCustomization(
+                profileId = profileId,
+                backgroundType = current.overlayBackgroundType,
+                imageUris = currentUris,
+                customText = current.overlayCustomText
+            )
+            loadProfile()
+        }
+    }
+
+    fun setMultipleOverlayImages(filePaths: List<String>) {
+        val current = _profile.value ?: return
+        viewModelScope.launch {
+            repository.updateOverlayCustomization(
+                profileId = profileId,
+                backgroundType = current.overlayBackgroundType,
+                imageUris = filePaths,
+                customText = current.overlayCustomText
+            )
+            loadProfile()
+        }
+    }
+
     class Factory(
         private val profileId: Long,
         private val repository: ProfileRepository,

@@ -90,6 +90,12 @@ class AppContainer(private val context: Context) {
         )
     }
 
+    val focusGoalRepository: com.blockit.data.repository.FocusGoalRepository by lazy {
+        com.blockit.data.repository.FocusGoalRepository(
+            focusGoalDao = database.focusGoalDao()
+        )
+    }
+
     init {
         // Connect intentPassManager break lifecycle to active focus sessions:
         // 1. When a break starts, immediately extend session end time in SQLite by the break duration

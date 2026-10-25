@@ -28,6 +28,11 @@ class ProfileRepository(
             list.map { item ->
                 val pType = if (item.profileType == "SCHEDULE") com.blockit.domain.model.ProfileType.SCHEDULE else com.blockit.domain.model.ProfileType.FOCUS
                 val lType = if (item.listType == "ALLOWLIST" || item.blockMode == "WHITELIST") com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
+                val bgType = try {
+                    com.blockit.domain.model.OverlayBackgroundType.valueOf(item.overlayBackgroundType)
+                } catch (_: Exception) {
+                    com.blockit.domain.model.OverlayBackgroundType.DEFAULT
+                }
                 Profile(
                     id = item.id,
                     name = item.name,
@@ -39,6 +44,9 @@ class ProfileRepository(
                     scheduleDaysMask = item.scheduleDaysMask,
                     scheduleStartMinute = item.scheduleStartMinute,
                     scheduleEndMinute = item.scheduleEndMinute,
+                    overlayBackgroundType = bgType,
+                    overlayImageUris = item.overlayImageUris.split("|").filter { it.isNotBlank() },
+                    overlayCustomText = item.overlayCustomText,
                     blockMode = if (lType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
                     createdAt = item.createdAt,
                     appCount = item.appCount,
@@ -52,6 +60,11 @@ class ProfileRepository(
         val entity = profileDao.getProfileById(profileId) ?: return null
         val pType = if (entity.profileType == "SCHEDULE") com.blockit.domain.model.ProfileType.SCHEDULE else com.blockit.domain.model.ProfileType.FOCUS
         val lType = if (entity.listType == "ALLOWLIST" || entity.blockMode == "WHITELIST") com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
+        val bgType = try {
+            com.blockit.domain.model.OverlayBackgroundType.valueOf(entity.overlayBackgroundType)
+        } catch (_: Exception) {
+            com.blockit.domain.model.OverlayBackgroundType.DEFAULT
+        }
         return Profile(
             id = entity.id,
             name = entity.name,
@@ -63,6 +76,9 @@ class ProfileRepository(
             scheduleDaysMask = entity.scheduleDaysMask,
             scheduleStartMinute = entity.scheduleStartMinute,
             scheduleEndMinute = entity.scheduleEndMinute,
+            overlayBackgroundType = bgType,
+            overlayImageUris = entity.overlayImageUris.split("|").filter { it.isNotBlank() },
+            overlayCustomText = entity.overlayCustomText,
             blockMode = if (lType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
             createdAt = entity.createdAt
         )
@@ -72,6 +88,11 @@ class ProfileRepository(
         return profileDao.getEnabledProfiles().map { entity ->
             val pType = if (entity.profileType == "SCHEDULE") com.blockit.domain.model.ProfileType.SCHEDULE else com.blockit.domain.model.ProfileType.FOCUS
             val lType = if (entity.listType == "ALLOWLIST" || entity.blockMode == "WHITELIST") com.blockit.domain.model.ListType.ALLOWLIST else com.blockit.domain.model.ListType.BLOCKLIST
+            val bgType = try {
+                com.blockit.domain.model.OverlayBackgroundType.valueOf(entity.overlayBackgroundType)
+            } catch (_: Exception) {
+                com.blockit.domain.model.OverlayBackgroundType.DEFAULT
+            }
             Profile(
                 id = entity.id,
                 name = entity.name,
@@ -83,6 +104,9 @@ class ProfileRepository(
                 scheduleDaysMask = entity.scheduleDaysMask,
                 scheduleStartMinute = entity.scheduleStartMinute,
                 scheduleEndMinute = entity.scheduleEndMinute,
+                overlayBackgroundType = bgType,
+                overlayImageUris = entity.overlayImageUris.split("|").filter { it.isNotBlank() },
+                overlayCustomText = entity.overlayCustomText,
                 blockMode = if (lType == com.blockit.domain.model.ListType.ALLOWLIST) com.blockit.domain.model.BlockMode.WHITELIST else com.blockit.domain.model.BlockMode.BLACKLIST,
                 createdAt = entity.createdAt
             )
@@ -131,8 +155,25 @@ class ProfileRepository(
                 scheduleDaysMask = profile.scheduleDaysMask,
                 scheduleStartMinute = profile.scheduleStartMinute,
                 scheduleEndMinute = profile.scheduleEndMinute,
+                overlayBackgroundType = profile.overlayBackgroundType.name,
+                overlayImageUris = profile.overlayImageUris.joinToString("|"),
+                overlayCustomText = profile.overlayCustomText,
                 createdAt = profile.createdAt
             )
+        )
+    }
+
+    suspend fun updateOverlayCustomization(
+        profileId: Long,
+        backgroundType: com.blockit.domain.model.OverlayBackgroundType,
+        imageUris: List<String>,
+        customText: String?
+    ) {
+        profileDao.updateOverlayCustomization(
+            profileId = profileId,
+            bgType = backgroundType.name,
+            imageUris = imageUris.joinToString("|"),
+            customText = customText?.trim()?.ifBlank { null }
         )
     }
 

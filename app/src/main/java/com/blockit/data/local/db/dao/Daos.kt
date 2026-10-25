@@ -10,6 +10,7 @@ import androidx.room.Update
 import com.blockit.data.local.db.entity.BlockEventEntity
 import com.blockit.data.local.db.entity.BlockedAppEntity
 import com.blockit.data.local.db.entity.BlockedDomainEntity
+import com.blockit.data.local.db.entity.FocusGoalEntity
 import com.blockit.data.local.db.entity.FocusSessionEntity
 import com.blockit.data.local.db.entity.ProfileEntity
 import com.blockit.data.local.db.entity.ScheduleEntity
@@ -27,6 +28,9 @@ data class ProfileWithCounts(
     val scheduleDaysMask: Int = 127,
     val scheduleStartMinute: Int = 540,
     val scheduleEndMinute: Int = 1020,
+    val overlayBackgroundType: String = "DEFAULT",
+    val overlayImageUris: String = "",
+    val overlayCustomText: String? = null,
     val createdAt: Long,
     val appCount: Int,
     val domainCount: Int
@@ -44,6 +48,9 @@ interface ProfileDao {
 
     @Query("SELECT * FROM profiles WHERE id = :profileId")
     suspend fun getProfileById(profileId: Long): ProfileEntity?
+
+    @Query("SELECT * FROM profiles WHERE name = :name LIMIT 1")
+    suspend fun getProfileByName(name: String): ProfileEntity?
 
     @Query("SELECT * FROM profiles WHERE isEnabled = 1")
     suspend fun getEnabledProfiles(): List<ProfileEntity>
@@ -65,6 +72,9 @@ interface ProfileDao {
 
     @Query("UPDATE profiles SET scheduleDaysMask = :daysMask, scheduleStartMinute = :startMin, scheduleEndMinute = :endMin WHERE id = :profileId")
     suspend fun updateProfileSchedule(profileId: Long, daysMask: Int, startMin: Int, endMin: Int)
+
+    @Query("UPDATE profiles SET overlayBackgroundType = :bgType, overlayImageUris = :imageUris, overlayCustomText = :customText WHERE id = :profileId")
+    suspend fun updateOverlayCustomization(profileId: Long, bgType: String, imageUris: String, customText: String?)
 
     @Query("SELECT * FROM profiles ORDER BY createdAt ASC")
     suspend fun getAllProfiles(): List<ProfileEntity>
@@ -226,4 +236,40 @@ interface BlockEventDao {
 
     @Query("DELETE FROM block_events")
     suspend fun clearAllEvents()
+}
+
+@Dao
+interface FocusGoalDao {
+    @Query("SELECT * FROM focus_goals WHERE target_date = :targetDate ORDER BY order_index ASC, id ASC")
+    fun observeGoalsForDate(targetDate: String): Flow<List<FocusGoalEntity>>
+
+    @Query("SELECT * FROM focus_goals WHERE target_date = :targetDate ORDER BY order_index ASC, id ASC")
+    suspend fun getGoalsForDate(targetDate: String): List<FocusGoalEntity>
+
+    @Query("SELECT * FROM focus_goals WHERE session_id = :sessionId ORDER BY order_index ASC, id ASC")
+    fun observeGoalsForSession(sessionId: Long): Flow<List<FocusGoalEntity>>
+
+    @Query("SELECT * FROM focus_goals WHERE id = :id")
+    suspend fun getGoalById(id: Long): FocusGoalEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGoal(goal: FocusGoalEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGoals(goals: List<FocusGoalEntity>)
+
+    @Update
+    suspend fun updateGoal(goal: FocusGoalEntity)
+
+    @Query("UPDATE focus_goals SET is_completed = :isCompleted, completed_at_ms = :completedAtMs WHERE id = :id")
+    suspend fun setGoalCompletion(id: Long, isCompleted: Boolean, completedAtMs: Long?)
+
+    @Query("UPDATE focus_goals SET session_id = :sessionId WHERE id = :id")
+    suspend fun linkGoalToSession(id: Long, sessionId: Long)
+
+    @Query("DELETE FROM focus_goals WHERE id = :id")
+    suspend fun deleteGoal(id: Long)
+
+    @Query("DELETE FROM focus_goals WHERE target_date = :targetDate")
+    suspend fun deleteGoalsForDate(targetDate: String)
 }

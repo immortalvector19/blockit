@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.blockit.data.local.datastore.PreferenceManager
+import com.blockit.data.repository.FocusGoalRepository
 import com.blockit.data.repository.FocusSessionManager
 import com.blockit.data.repository.ProfileRepository
 import com.blockit.data.repository.UsageInsightsRepository
@@ -11,6 +12,7 @@ import com.blockit.domain.evaluator.RuleEvaluator
 import com.blockit.domain.model.BlockMode
 import com.blockit.domain.model.BlockedApp
 import com.blockit.domain.model.BlockedDomain
+import com.blockit.domain.model.FocusGoal
 import com.blockit.domain.model.FocusSession
 import com.blockit.domain.model.Profile
 import com.blockit.domain.model.Schedule
@@ -35,7 +37,8 @@ class MainDashboardViewModel(
     private val focusSessionManager: FocusSessionManager,
     private val scheduleManager: ScheduleManager,
     private val usageInsightsRepository: UsageInsightsRepository,
-    private val preferenceManager: PreferenceManager
+    private val preferenceManager: PreferenceManager,
+    private val focusGoalRepository: FocusGoalRepository
 ) : ViewModel() {
 
     val profiles: StateFlow<List<Profile>> = profileRepository.observeAllProfiles()
@@ -79,6 +82,64 @@ class MainDashboardViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = true
         )
+
+    private val _selectedGoalDate = MutableStateFlow(FocusGoalRepository.getTodayIsoDate())
+    val selectedGoalDate: StateFlow<String> = _selectedGoalDate.asStateFlow()
+
+    val goalsForSelectedDate: StateFlow<List<FocusGoal>> = _selectedGoalDate.flatMapLatest { date ->
+        focusGoalRepository.observeGoalsForDate(date)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val todayGoals: StateFlow<List<FocusGoal>> = focusGoalRepository.observeTodayGoals()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun selectGoalDate(dateIso: String) {
+        _selectedGoalDate.value = dateIso
+    }
+
+    fun addGoal(title: String, targetDate: String = _selectedGoalDate.value, sessionId: Long? = null) {
+        viewModelScope.launch {
+            focusGoalRepository.addGoal(title, targetDate, sessionId)
+        }
+    }
+
+    fun toggleGoal(id: Long, isCompleted: Boolean) {
+        viewModelScope.launch {
+            focusGoalRepository.toggleGoalCompletion(id, isCompleted)
+        }
+    }
+
+    fun deleteGoal(id: Long) {
+        viewModelScope.launch {
+            focusGoalRepository.deleteGoal(id)
+        }
+    }
+
+    fun startSessionWithGoals(
+        profileId: Long,
+        durationMinutes: Int,
+        selectedGoalIds: List<Long> = emptyList(),
+        newGoalTitles: List<String> = emptyList()
+    ) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val sessionId = focusSessionManager.startSession(profileId, durationMinutes)
+            val today = FocusGoalRepository.getTodayIsoDate()
+            if (selectedGoalIds.isNotEmpty()) {
+                focusGoalRepository.linkGoalsToSession(selectedGoalIds, sessionId)
+            }
+            newGoalTitles.forEach { title ->
+                if (title.isNotBlank()) {
+                    focusGoalRepository.addGoal(
+                        title = title.trim(),
+                        targetDate = today,
+                        sessionId = sessionId
+                    )
+                }
+            }
+            ruleEvaluator.refreshRules()
+            scheduleManager.scheduleNextBoundaryAlarm()
+        }
+    }
 
     fun completeOnboarding() {
         viewModelScope.launch {
@@ -296,7 +357,8 @@ class MainDashboardViewModel(
         private val focusSessionManager: FocusSessionManager,
         private val scheduleManager: ScheduleManager,
         private val usageInsightsRepository: UsageInsightsRepository,
-        private val preferenceManager: PreferenceManager
+        private val preferenceManager: PreferenceManager,
+        private val focusGoalRepository: FocusGoalRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -306,7 +368,8 @@ class MainDashboardViewModel(
                 focusSessionManager,
                 scheduleManager,
                 usageInsightsRepository,
-                preferenceManager
+                preferenceManager,
+                focusGoalRepository
             ) as T
         }
     }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import com.blockit.core.BlockItApplication
 import com.blockit.domain.model.SessionStrictness
 import com.blockit.ui.theme.BlockItTheme
+import kotlinx.coroutines.launch
 
 class BlockOverlayActivity : ComponentActivity() {
 
@@ -97,6 +98,26 @@ class BlockOverlayActivity : ComponentActivity() {
 
                 val isBreakActive by container.intentPassManager.isBreakActiveFlow.collectAsState()
                 val breakExpiresAtMs by container.intentPassManager.breakExpiresAtMsFlow.collectAsState()
+                val todayGoals by container.focusGoalRepository.observeTodayGoals().collectAsState(initial = emptyList())
+
+                val profileEntity by androidx.compose.runtime.produceState<com.blockit.data.local.db.entity.ProfileEntity?>(
+                    initialValue = null,
+                    key1 = profile
+                ) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        container.database.profileDao().getProfileByName(profile)
+                    }
+                }
+
+                val bgType = try {
+                    com.blockit.domain.model.OverlayBackgroundType.valueOf(
+                        profileEntity?.overlayBackgroundType ?: "DEFAULT"
+                    )
+                } catch (_: Exception) {
+                    com.blockit.domain.model.OverlayBackgroundType.DEFAULT
+                }
+                val imageUris = profileEntity?.overlayImageUris?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+                val customMantra = profileEntity?.overlayCustomText
 
                 BlockScreenContent(
                     targetIdentifier = target,
@@ -110,6 +131,24 @@ class BlockOverlayActivity : ComponentActivity() {
                     scheduleEndMs = snapshot.activeScheduleEndTimestampMs,
                     isBreakActive = isBreakActive,
                     breakExpiresAtMs = breakExpiresAtMs,
+                    overlayBackgroundType = bgType,
+                    overlayImageUris = imageUris,
+                    overlayCustomText = customMantra,
+                    goals = todayGoals,
+                    onToggleGoal = { goalId, isCompleted ->
+                        container.applicationScope.launch {
+                            container.focusGoalRepository.toggleGoalCompletion(goalId, isCompleted)
+                        }
+                    },
+                    onAddGoal = { title ->
+                        container.applicationScope.launch {
+                            container.focusGoalRepository.addGoal(
+                                title = title,
+                                targetDate = com.blockit.data.repository.FocusGoalRepository.getTodayIsoDate(),
+                                sessionId = activeSession?.id
+                            )
+                        }
+                    },
                     onHomeClicked = {
                         kickToHome()
                     },

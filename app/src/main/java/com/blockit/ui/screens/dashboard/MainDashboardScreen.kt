@@ -48,6 +48,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
+import com.blockit.data.repository.DayOption
+import com.blockit.data.repository.FocusGoalRepository
+import com.blockit.domain.model.FocusGoal
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
@@ -230,6 +240,10 @@ fun MainDashboardScreen(
     val selectedProfileId by viewModel.selectedProfileId.collectAsState()
     val allProfileApps by viewModel.allProfileApps.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val todayGoals by viewModel.todayGoals.collectAsState()
+    val goalsForSelectedDate by viewModel.goalsForSelectedDate.collectAsState()
+    val selectedGoalDate by viewModel.selectedGoalDate.collectAsState()
+    var showGoalsPlannerDialog by rememberSaveable { mutableStateOf(false) }
 
     // Strict Mode friction state
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -324,6 +338,18 @@ fun MainDashboardScreen(
                     onClick = {
                         scope.launch { drawerState.close() }
                         onOpenSettingsClick()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Daily Goals & Achievements", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = colors.textPrimary) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showGoalsPlannerDialog = true
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
@@ -536,6 +562,14 @@ fun MainDashboardScreen(
                             activeSessionStrictness = strictness
                             viewModel.startSession(profId, mins)
                         },
+                        onStartSessionWithGoals = { profId, mins, strictness, selectedGoalIds, newTitles ->
+                            activeSessionStrictness = strictness
+                            viewModel.startSessionWithGoals(profId, mins, selectedGoalIds, newTitles)
+                        },
+                        todayGoals = todayGoals,
+                        onToggleGoal = { id, done -> viewModel.toggleGoal(id, done) },
+                        onAddGoal = { text -> viewModel.addGoal(text) },
+                        onOpenGoalsPlanner = { showGoalsPlannerDialog = true },
                         onEndSession = { sessId ->
                             pendingStopSessionId = sessId
                             showStopConfirmDialog = true
@@ -648,20 +682,33 @@ fun MainDashboardScreen(
                 val targetProfile = profiles.find { it.id == targetProfileIdForDuration }
                 DurationBottomSheet(
                     targetProfile = targetProfile,
+                    todayGoals = todayGoals,
                     onDismiss = {
                         showProfileDurationSheet = false
                         targetProfileIdForDuration = null
                     },
-                    onStart = { profId, mins, strictness ->
+                    onStart = { profId, mins, strictness, selectedGoalIds, newTitles ->
                         showProfileDurationSheet = false
                         targetProfileIdForDuration = null
                         if (!isProtected) {
                             showOnboardingChecklist = true
                         } else {
                             activeSessionStrictness = strictness
-                            viewModel.startSession(profId, mins)
+                            viewModel.startSessionWithGoals(profId, mins, selectedGoalIds, newTitles)
                         }
                     }
+                )
+            }
+
+            if (showGoalsPlannerDialog) {
+                GoalsPlannerSheet(
+                    selectedDate = selectedGoalDate,
+                    goals = goalsForSelectedDate,
+                    onSelectDate = { viewModel.selectGoalDate(it) },
+                    onToggleGoal = { id, done -> viewModel.toggleGoal(id, done) },
+                    onDeleteGoal = { id -> viewModel.deleteGoal(id) },
+                    onAddGoal = { text, date -> viewModel.addGoal(text, date) },
+                    onDismiss = { showGoalsPlannerDialog = false }
                 )
             }
         }
@@ -870,6 +917,11 @@ private fun DashboardHomeContent(
     onFixPermissions: () -> Unit,
     onSelectProfile: (Long) -> Unit,
     onStartSession: (Long, Int, SessionStrictness) -> Unit,
+    onStartSessionWithGoals: (Long, Int, SessionStrictness, List<Long>, List<String>) -> Unit = { id, mins, strict, _, _ -> onStartSession(id, mins, strict) },
+    todayGoals: List<FocusGoal> = emptyList(),
+    onToggleGoal: (Long, Boolean) -> Unit = { _, _ -> },
+    onAddGoal: (String) -> Unit = {},
+    onOpenGoalsPlanner: () -> Unit = {},
     onEndSession: (Long) -> Unit,
     onDuplicateProfile: (Long) -> Unit,
     onCreateTemplateProfile: (String) -> Unit,
@@ -1242,7 +1294,7 @@ private fun DashboardHomeContent(
 
                     val isScheduleActive = ruleSnapshot.isScheduleActive
                     val startButtonText = when {
-                        isScheduleActive -> "Start disabled — schedule running"
+                        isScheduleActive -> "Start disabled â€” schedule running"
                         !isProtected -> "Set up engine to start"
                         targetProfile == null -> "Create profile to start"
                         else -> "Choose duration and start"
@@ -1282,6 +1334,14 @@ private fun DashboardHomeContent(
                 }
             }
         }
+
+        // SECTION 2.5: DAILY GOALS & ACHIEVEMENTS CARD
+        DashboardDailyGoalsCard(
+            goals = todayGoals,
+            onToggleGoal = onToggleGoal,
+            onAddGoal = onAddGoal,
+            onOpenPlanner = onOpenGoalsPlanner
+        )
 
         // SECTION 3: TODAY'S STATS SUMMARY
         Surface(
@@ -1626,10 +1686,11 @@ private fun DashboardHomeContent(
     if (showDurationSheet) {
         DurationBottomSheet(
             targetProfile = targetProfile,
+            todayGoals = todayGoals,
             onDismiss = { showDurationSheet = false },
-            onStart = { profId, mins, strictness ->
+            onStart = { profId, mins, strictness, selectedGoalIds, newTitles ->
                 showDurationSheet = false
-                onStartSession(profId, mins, strictness)
+                onStartSessionWithGoals(profId, mins, strictness, selectedGoalIds, newTitles)
             }
         )
     }
@@ -1639,8 +1700,9 @@ private fun DashboardHomeContent(
 @Composable
 private fun DurationBottomSheet(
     targetProfile: Profile?,
+    todayGoals: List<FocusGoal> = emptyList(),
     onDismiss: () -> Unit,
-    onStart: (Long, Int, SessionStrictness) -> Unit
+    onStart: (Long, Int, SessionStrictness, List<Long>, List<String>) -> Unit
 ) {
     val colors = FocusTheme.colors
     var totalMinutes by rememberSaveable { mutableIntStateOf(25) }
@@ -1648,6 +1710,13 @@ private fun DurationBottomSheet(
         FocusDurationState().withTotalMinutes(totalMinutes)
     }
     var selectedStrictness by rememberSaveable { mutableStateOf(SessionStrictness.NORMAL) }
+    var newSessionGoalText by rememberSaveable { mutableStateOf("") }
+    val selectedGoalIds = remember(todayGoals) {
+        androidx.compose.runtime.mutableStateListOf<Long>().apply {
+            addAll(todayGoals.filter { !it.isCompleted }.map { it.id })
+        }
+    }
+    val newGoalTitles = remember { androidx.compose.runtime.mutableStateListOf<String>() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1730,6 +1799,120 @@ private fun DurationBottomSheet(
                     }
                 )
 
+                // Session Goals & Achievements Section
+                Text(
+                    text = "Session goals & achievements",
+                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+
+                Surface(
+                    shape = FocusShapes.medium,
+                    color = colors.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(FocusSpacing.md)) {
+                        if (todayGoals.isEmpty() && newGoalTitles.isEmpty()) {
+                            Text(
+                                text = "What do you want to accomplish in this focus session?",
+                                style = FocusTypography.caption,
+                                color = colors.textSecondary
+                            )
+                        } else {
+                            todayGoals.forEach { goal ->
+                                val isChecked = selectedGoalIds.contains(goal.id)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(FocusShapes.small)
+                                        .clickable {
+                                            if (isChecked) selectedGoalIds.remove(goal.id)
+                                            else selectedGoalIds.add(goal.id)
+                                        }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isChecked) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                        contentDescription = null,
+                                        tint = if (isChecked) colors.accent else colors.textTertiary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = goal.title,
+                                        style = FocusTypography.bodySmall,
+                                        color = if (isChecked) colors.textPrimary else colors.textSecondary,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            newGoalTitles.forEach { title ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = title,
+                                        style = FocusTypography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                        color = colors.textPrimary,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                        ) {
+                            OutlinedTextField(
+                                value = newSessionGoalText,
+                                onValueChange = { newSessionGoalText = it },
+                                placeholder = {
+                                    Text("Add goal for this session...", style = FocusTypography.caption)
+                                },
+                                textStyle = FocusTypography.bodySmall,
+                                singleLine = true,
+                                shape = FocusShapes.small,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    if (newSessionGoalText.isNotBlank()) {
+                                        newGoalTitles.add(newSessionGoalText.trim())
+                                        newSessionGoalText = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(FocusShapes.small)
+                                    .background(colors.accent)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = "Add Goal",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Strictness Selection
                 Text(
                     text = "Session strictness",
@@ -1802,7 +1985,13 @@ private fun DurationBottomSheet(
                             val now = System.currentTimeMillis()
                             if (now - lastStartClickTime >= 600L && targetProfile != null) {
                                 lastStartClickTime = now
-                                onStart(targetProfile.id, currentMins, selectedStrictness)
+                                onStart(
+                                    targetProfile.id,
+                                    currentMins,
+                                    selectedStrictness,
+                                    selectedGoalIds.toList(),
+                                    newGoalTitles.toList()
+                                )
                             }
                         },
                         enabled = targetProfile != null && currentMins > 0,
@@ -2046,7 +2235,7 @@ private fun ProfilesTabContent(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Text(
-                                        text = "${formatDaysSummary(profile.scheduleDaysMask)} • ${formatMinuteOfDayAmPm(profile.scheduleStartMinute)}–${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}",
+                                        text = "${formatDaysSummary(profile.scheduleDaysMask)} â€¢ ${formatMinuteOfDayAmPm(profile.scheduleStartMinute)}â€“${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}",
                                         style = FocusTypography.caption.copy(fontWeight = FontWeight.Medium),
                                         color = colors.textPrimary
                                     )
@@ -2289,11 +2478,11 @@ private fun RoutinesTabContent(
 
     val presets = remember {
         listOf(
-            RoutinePresetItem("Workday", "9:00 AM – 5:00 PM (Mon–Fri)", 31, 540, 1020),
-            RoutinePresetItem("Deep work", "8:00 AM – 12:00 PM (Mon–Fri)", 31, 480, 720),
-            RoutinePresetItem("Evening", "8:30 PM – 11:30 PM (Daily)", 127, 1230, 1410),
-            RoutinePresetItem("Sleep", "10:30 PM – 6:30 AM (Daily)", 127, 1350, 390),
-            RoutinePresetItem("Weekend", "10:00 AM – 6:00 PM (Sat–Sun)", 96, 600, 1080)
+            RoutinePresetItem("Workday", "9:00 AM â€“ 5:00 PM (Monâ€“Fri)", 31, 540, 1020),
+            RoutinePresetItem("Deep work", "8:00 AM â€“ 12:00 PM (Monâ€“Fri)", 31, 480, 720),
+            RoutinePresetItem("Evening", "8:30 PM â€“ 11:30 PM (Daily)", 127, 1230, 1410),
+            RoutinePresetItem("Sleep", "10:30 PM â€“ 6:30 AM (Daily)", 127, 1350, 390),
+            RoutinePresetItem("Weekend", "10:00 AM â€“ 6:00 PM (Satâ€“Sun)", 96, 600, 1080)
         )
     }
 
@@ -2477,7 +2666,7 @@ private fun ScheduleProfileCard(
     val colors = FocusTheme.colors
     var menuExpanded by remember { mutableStateOf(false) }
     val isOvernight = isOvernightWindow(profile.scheduleStartMinute, profile.scheduleEndMinute)
-    val timeRangeStr = "${formatMinuteOfDayAmPm(profile.scheduleStartMinute)} – ${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}"
+    val timeRangeStr = "${formatMinuteOfDayAmPm(profile.scheduleStartMinute)} â€“ ${formatMinuteOfDayAmPm(profile.scheduleEndMinute)}"
     val daysSummary = formatDaysSummary(profile.scheduleDaysMask)
 
     Surface(
@@ -2607,7 +2796,7 @@ private fun ScheduleProfileCard(
                     color = colors.textPrimary
                 )
                 Text(
-                    text = "•",
+                    text = "â€¢",
                     style = FocusTypography.bodySmall,
                     color = colors.textTertiary
                 )
@@ -3080,3 +3269,468 @@ private data class ActivityBarData(
     val count: Int,
     val isCurrent: Boolean
 )
+
+@Composable
+private fun DashboardDailyGoalsCard(
+    goals: List<FocusGoal>,
+    onToggleGoal: (Long, Boolean) -> Unit,
+    onAddGoal: (String) -> Unit,
+    onOpenPlanner: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = FocusTheme.colors
+    var newGoalText by remember { mutableStateOf("") }
+    val completedCount = goals.count { it.isCompleted }
+    val totalCount = goals.size
+    val progress = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+    val allCompleted = totalCount > 0 && completedCount == totalCount
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(FocusShapes.medium)
+            .border(1.dp, colors.border, FocusShapes.medium),
+        color = colors.surface,
+        shape = FocusShapes.medium
+    ) {
+        Column(modifier = Modifier.padding(FocusSpacing.lg)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.EmojiEvents,
+                        contentDescription = null,
+                        tint = if (allCompleted) WarningAmber else colors.accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Daily Goals & Achievements",
+                        style = FocusTypography.title,
+                        color = colors.textPrimary
+                    )
+                }
+
+                TextButton(
+                    onClick = onOpenPlanner,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CalendarMonth,
+                        contentDescription = null,
+                        tint = colors.accent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Plan days",
+                        style = FocusTypography.label,
+                        color = colors.accent
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(FocusSpacing.xs))
+
+            if (totalCount > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (allCompleted) "All today's goals completed" else "$completedCount of $totalCount achieved today",
+                        style = FocusTypography.caption.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (allCompleted) WarningAmber else colors.textSecondary
+                    )
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        style = FocusTypography.caption.copy(fontWeight = FontWeight.Bold),
+                        color = colors.accent
+                    )
+                }
+                Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape),
+                    color = if (allCompleted) WarningAmber else colors.accent,
+                    trackColor = colors.surfaceVariant
+                )
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
+            } else {
+                Text(
+                    text = "Set daily goals to stay accountable and track achievements across your focus sessions.",
+                    style = FocusTypography.bodySmall,
+                    color = colors.textSecondary
+                )
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
+            }
+
+            // Goals list
+            if (goals.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    goals.forEach { goal ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(FocusShapes.small)
+                                .clickable { onToggleGoal(goal.id, !goal.isCompleted) }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (goal.isCompleted) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (goal.isCompleted) colors.accent else colors.textTertiary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = goal.title,
+                                style = FocusTypography.bodySmall.copy(
+                                    textDecoration = if (goal.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                    fontWeight = if (goal.isCompleted) FontWeight.Normal else FontWeight.Medium
+                                ),
+                                color = if (goal.isCompleted) colors.textTertiary else colors.textPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(FocusSpacing.sm))
+            }
+
+            // Quick add for today
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+            ) {
+                OutlinedTextField(
+                    value = newGoalText,
+                    onValueChange = { newGoalText = it },
+                    placeholder = {
+                        Text("Add today's goal...", style = FocusTypography.caption)
+                    },
+                    textStyle = FocusTypography.bodySmall,
+                    singleLine = true,
+                    shape = FocusShapes.small,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = {
+                        if (newGoalText.isNotBlank()) {
+                            onAddGoal(newGoalText.trim())
+                            newGoalText = ""
+                        }
+                    },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(FocusShapes.small)
+                        .background(colors.accent)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "Add Goal",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GoalsPlannerSheet(
+    selectedDate: String,
+    goals: List<FocusGoal>,
+    onSelectDate: (String) -> Unit,
+    onToggleGoal: (Long, Boolean) -> Unit,
+    onDeleteGoal: (Long) -> Unit,
+    onAddGoal: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = FocusTheme.colors
+    var newGoalText by remember { mutableStateOf("") }
+    val dayOptions = remember { FocusGoalRepository.getDayOptions(daysBack = 1, daysForward = 6) }
+
+    val completedCount = goals.count { it.isCompleted }
+    val totalCount = goals.size
+    val progress = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+    val allCompleted = totalCount > 0 && completedCount == totalCount
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        shape = FocusShapes.large,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = FocusSpacing.sm)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(colors.border)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = FocusSpacing.xl)
+                    .padding(bottom = FocusSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(FocusSpacing.md)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Daily Goals Planner",
+                            style = FocusTypography.headline,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = "Set & organize achievements for any day",
+                            style = FocusTypography.caption,
+                            color = colors.textSecondary
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = colors.textSecondary)
+                    }
+                }
+
+                // Horizontal Day Selector Pills
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    dayOptions.forEach { opt ->
+                        val isSelected = opt.isoDate == selectedDate
+                        Surface(
+                            onClick = { onSelectDate(opt.isoDate) },
+                            shape = FocusShapes.medium,
+                            color = if (isSelected) colors.accentContainer else colors.surfaceVariant,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) colors.accent else colors.border
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = opt.dayOfWeek.uppercase(),
+                                    style = FocusTypography.caption.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSelected) colors.accent else colors.textTertiary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = opt.dayOfMonth,
+                                    style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSelected) colors.textPrimary else colors.textSecondary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = opt.label,
+                                    style = FocusTypography.caption.copy(fontSize = 10.sp),
+                                    color = if (isSelected) colors.accent else colors.textMuted
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Date Title & Progress
+                Surface(
+                    shape = FocusShapes.medium,
+                    color = colors.surfaceVariant,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(FocusSpacing.md)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = FocusGoalRepository.getRelativeDateLabel(selectedDate),
+                                style = FocusTypography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary
+                            )
+                            if (totalCount > 0) {
+                                Text(
+                                    text = if (allCompleted) "All goals completed" else "$completedCount / $totalCount",
+                                    style = FocusTypography.caption.copy(fontWeight = FontWeight.Bold),
+                                    color = if (allCompleted) WarningAmber else colors.accent
+                                )
+                            }
+                        }
+
+                        if (totalCount > 0) {
+                            Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(CircleShape),
+                                color = if (allCompleted) WarningAmber else colors.accent,
+                                trackColor = colors.surface
+                            )
+                        }
+                    }
+                }
+
+                // Goals List for Selected Day
+                if (goals.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = FocusSpacing.xl),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Rounded.EmojiEvents,
+                                contentDescription = null,
+                                tint = colors.textTertiary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                            Text(
+                                text = "No goals planned for ${FocusGoalRepository.getRelativeDateLabel(selectedDate)}",
+                                style = FocusTypography.bodySmall,
+                                color = colors.textSecondary
+                            )
+                            Text(
+                                text = "Add goals below to prepare your focus sessions.",
+                                style = FocusTypography.caption,
+                                color = colors.textTertiary
+                            )
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        goals.forEach { goal ->
+                            Surface(
+                                shape = FocusShapes.small,
+                                color = colors.surfaceVariant,
+                                border = BorderStroke(1.dp, colors.border),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = FocusSpacing.sm, vertical = FocusSpacing.xs),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(FocusShapes.small)
+                                            .clickable { onToggleGoal(goal.id, !goal.isCompleted) }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (goal.isCompleted) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                            contentDescription = null,
+                                            tint = if (goal.isCompleted) colors.accent else colors.textTertiary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            text = goal.title,
+                                            style = FocusTypography.bodySmall.copy(
+                                                textDecoration = if (goal.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                                fontWeight = if (goal.isCompleted) FontWeight.Normal else FontWeight.Medium
+                                            ),
+                                            color = if (goal.isCompleted) colors.textTertiary else colors.textPrimary
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { onDeleteGoal(goal.id) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DeleteOutline,
+                                            contentDescription = "Delete",
+                                            tint = colors.textTertiary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Add goal input for the selected day
+                Spacer(modifier = Modifier.height(FocusSpacing.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FocusSpacing.xs)
+                ) {
+                    OutlinedTextField(
+                        value = newGoalText,
+                        onValueChange = { newGoalText = it },
+                        placeholder = {
+                            Text("New goal for ${FocusGoalRepository.getRelativeDateLabel(selectedDate)}...", style = FocusTypography.caption)
+                        },
+                        textStyle = FocusTypography.bodySmall,
+                        singleLine = true,
+                        shape = FocusShapes.small,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = {
+                            if (newGoalText.isNotBlank()) {
+                                onAddGoal(newGoalText.trim(), selectedDate)
+                                newGoalText = ""
+                            }
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(FocusShapes.small)
+                            .background(colors.accent)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add Goal",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

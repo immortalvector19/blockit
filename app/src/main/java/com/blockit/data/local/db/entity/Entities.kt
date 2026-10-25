@@ -20,7 +20,10 @@ data class ProfileEntity(
     val scheduleDaysMask: Int = 127,
     val scheduleStartMinute: Int = 540,
     val scheduleEndMinute: Int = 1020,
-    val createdAt: Long
+    val overlayBackgroundType: String = "DEFAULT",
+    val overlayImageUris: String = "",
+    val overlayCustomText: String? = null,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 @Entity(
@@ -114,4 +117,29 @@ data class BlockEventEntity(
     val targetType: String, // "APP" or "WEBSITE"
     val identifier: String,
     val profileName: String
+)
+
+@Entity(
+    tableName = "focus_goals",
+    indices = [
+        Index(value = ["target_date"]),
+        Index(value = ["session_id"])
+    ]
+)
+data class FocusGoalEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val title: String,
+    @ColumnInfo(name = "target_date")
+    val targetDate: String,
+    @ColumnInfo(name = "session_id")
+    val sessionId: Long? = null,
+    @ColumnInfo(name = "is_completed")
+    val isCompleted: Boolean = false,
+    @ColumnInfo(name = "completed_at_ms")
+    val completedAtMs: Long? = null,
+    @ColumnInfo(name = "created_at_ms")
+    val createdAtMs: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "order_index")
+    val orderIndex: Int = 0
 )

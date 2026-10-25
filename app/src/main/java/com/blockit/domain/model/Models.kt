@@ -15,6 +15,12 @@ enum class BlockMode {
     WHITELIST
 }
 
+enum class OverlayBackgroundType {
+    DEFAULT,
+    SINGLE_IMAGE,
+    COLLAGE_4
+}
+
 data class Profile(
     val id: Long = 0,
     val name: String,
@@ -26,6 +32,9 @@ data class Profile(
     val scheduleDaysMask: Int = 127,
     val scheduleStartMinute: Int = 540,
     val scheduleEndMinute: Int = 1020,
+    val overlayBackgroundType: OverlayBackgroundType = OverlayBackgroundType.DEFAULT,
+    val overlayImageUris: List<String> = emptyList(),
+    val overlayCustomText: String? = null,
     val blockMode: BlockMode = if (listType == ListType.ALLOWLIST) BlockMode.WHITELIST else BlockMode.BLACKLIST,
     val createdAt: Long = System.currentTimeMillis(),
     val appCount: Int = 0,
@@ -61,6 +70,17 @@ data class FocusSession(
     val startTimestamp: Long,
     val endTimestamp: Long,
     val isActive: Boolean = true
+)
+
+data class FocusGoal(
+    val id: Long = 0,
+    val title: String,
+    val targetDate: String, // "YYYY-MM-DD"
+    val sessionId: Long? = null,
+    val isCompleted: Boolean = false,
+    val completedAtMs: Long? = null,
+    val createdAtMs: Long = System.currentTimeMillis(),
+    val orderIndex: Int = 0
 )
 
 enum class SessionStrictness {

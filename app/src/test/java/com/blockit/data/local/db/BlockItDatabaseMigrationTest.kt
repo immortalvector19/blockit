@@ -88,4 +88,67 @@ class BlockItDatabaseMigrationTest {
             executedQueries.any { it.contains("ALTER TABLE profiles ADD COLUMN blockMode TEXT NOT NULL DEFAULT 'BLACKLIST'") }
         )
     }
+
+    @Test
+    fun migration_3_4_addsOverlayCustomizationColumns() {
+        val executedQueries = mutableListOf<String>()
+
+        val dbProxy = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java)
+        ) { _, method, args ->
+            if (method.name == "execSQL" && args != null && args.isNotEmpty()) {
+                val sql = args[0] as String
+                executedQueries.add(sql.trim())
+            }
+            null
+        } as SupportSQLiteDatabase
+
+        BlockItDatabase.MIGRATION_3_4.migrate(dbProxy)
+
+        assertTrue(
+            "Should add overlayBackgroundType column",
+            executedQueries.any { it.contains("ALTER TABLE profiles ADD COLUMN overlayBackgroundType TEXT NOT NULL DEFAULT 'DEFAULT'") }
+        )
+        assertTrue(
+            "Should add overlayImageUris column",
+            executedQueries.any { it.contains("ALTER TABLE profiles ADD COLUMN overlayImageUris TEXT NOT NULL DEFAULT ''") }
+        )
+        assertTrue(
+            "Should add overlayCustomText column",
+            executedQueries.any { it.contains("ALTER TABLE profiles ADD COLUMN overlayCustomText TEXT") }
+        )
+        assertEquals("Total migration 3->4 statements count", 3, executedQueries.size)
+    }
+
+    @Test
+    fun migration_4_5_createsFocusGoalsTableAndIndices() {
+        val executedQueries = mutableListOf<String>()
+
+        val dbProxy = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java)
+        ) { _, method, args ->
+            if (method.name == "execSQL" && args != null && args.isNotEmpty()) {
+                val sql = args[0] as String
+                executedQueries.add(sql.trim())
+            }
+            null
+        } as SupportSQLiteDatabase
+
+        BlockItDatabase.MIGRATION_4_5.migrate(dbProxy)
+
+        assertTrue(
+            "Should create focus_goals table",
+            executedQueries.any { it.contains("CREATE TABLE IF NOT EXISTS focus_goals") }
+        )
+        assertTrue(
+            "Should create index on target_date",
+            executedQueries.any { it.contains("CREATE INDEX IF NOT EXISTS index_focus_goals_target_date ON focus_goals (target_date)") }
+        )
+        assertTrue(
+            "Should create index on session_id",
+            executedQueries.any { it.contains("CREATE INDEX IF NOT EXISTS index_focus_goals_session_id ON focus_goals (session_id)") }
+        )
+    }
 }
